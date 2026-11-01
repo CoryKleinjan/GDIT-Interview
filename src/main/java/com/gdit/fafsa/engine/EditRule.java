@@ -22,17 +22,14 @@ public record EditRule(
         @JsonIgnore Predicate<FafsaApplication> appliesTo,
         @JsonIgnore Predicate<FafsaApplication> check) {
 
+    /** Severity and message describe a failure, so only failed results carry them. */
     public RuleResult evaluate(FafsaApplication application) {
         if (!appliesTo.test(application)) {
-            return result(Outcome.NOT_APPLICABLE, null);
+            return new RuleResult(id, Outcome.NOT_APPLICABLE, null, null, fields);
         }
         if (check.test(application)) {
-            return result(Outcome.PASSED, null);
+            return new RuleResult(id, Outcome.PASSED, null, null, fields);
         }
-        return result(Outcome.FAILED, message);
-    }
-
-    private RuleResult result(Outcome outcome, String message) {
-        return new RuleResult(id, outcome, severity, message, fields);
+        return new RuleResult(id, Outcome.FAILED, severity, message, fields);
     }
 }
