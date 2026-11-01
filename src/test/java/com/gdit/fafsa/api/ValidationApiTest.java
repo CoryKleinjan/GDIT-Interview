@@ -41,7 +41,7 @@ class ValidationApiTest {
         post(VALIDATE, sample("valid-application.json"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("VALID"))
-                .andExpect(jsonPath("$.results", hasSize(11)))
+                .andExpect(jsonPath("$.results", hasSize(12)))
                 .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')]").isEmpty())
                 .andExpect(jsonPath("$.results[0].severity").doesNotExist())
                 .andExpect(jsonPath("$.results[0].message").doesNotExist())
@@ -57,10 +57,10 @@ class ValidationApiTest {
                 .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')].ruleId").value(containsInAnyOrder(
                         "student-age", "ssn-format", "dependent-parent-income", "non-negative-income",
                         "household-college-count", "state-code", "married-spouse-info")))
-                .andExpect(jsonPath("$.results[2].ruleId").value("student-age"))
-                .andExpect(jsonPath("$.results[2].severity").value("ERROR"))
-                .andExpect(jsonPath("$.results[2].message").isNotEmpty())
-                .andExpect(jsonPath("$.results[2].fields").value(contains("studentInfo.dateOfBirth")));
+                .andExpect(jsonPath("$.results[3].ruleId").value("student-age"))
+                .andExpect(jsonPath("$.results[3].severity").value("ERROR"))
+                .andExpect(jsonPath("$.results[3].message").isNotEmpty())
+                .andExpect(jsonPath("$.results[3].fields").value(contains("studentInfo.dateOfBirth")));
     }
 
     @Test
@@ -104,11 +104,19 @@ class ValidationApiTest {
     }
 
     @Test
+    void blankNamesFailTheNameRules() throws Exception {
+        post(VALIDATE, sample("valid-application.json").replace("\"Jane\"", "\"   \""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("INVALID"))
+                .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')].ruleId").value(contains("student-name")));
+    }
+
+    @Test
     void missingStatusesAreEditFailuresAndEveryOtherRuleStillRuns() throws Exception {
         post(VALIDATE, "{\"stateOfResidence\": \"CA\"}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("INVALID"))
-                .andExpect(jsonPath("$.results", hasSize(11)))
+                .andExpect(jsonPath("$.results", hasSize(12)))
                 .andExpect(jsonPath("$.results[0].ruleId").value("marital-status"))
                 .andExpect(jsonPath("$.results[0].outcome").value("FAILED"))
                 .andExpect(jsonPath("$.results[?(@.ruleId == 'married-spouse-info')].outcome")
@@ -119,7 +127,7 @@ class ValidationApiTest {
     void listsTheActiveRulesInPriorityOrder() throws Exception {
         mvc.perform(get("/api/v1/rules"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(11)))
+                .andExpect(jsonPath("$", hasSize(12)))
                 .andExpect(jsonPath("$[0].id").value("marital-status"))
                 .andExpect(jsonPath("$[0].severity").value("ERROR"))
                 .andExpect(jsonPath("$[0].fields").value(contains("maritalStatus")))

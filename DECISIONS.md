@@ -34,7 +34,7 @@ A rule looks like this:
   when: { field: maritalStatus, equals: married }
 ```
 
-Each rule has the same small shape: which **fields**, whether they're **required**, an optional **check** for present values, an optional **when** condition, and its **examples**. Six built-in checks (`matches`, `oneOf`, `min`, `atMost`, `minAge`, `maxAge`) and three combinators (`allOf`, `anyOf`, `not`) cover all 11 shipped rules. Each built-in is a short Java record in `Check.java`, so the primitives are type-safe and unit tested, while checks built from them, the fields and the rules are configuration.
+Each rule has the same small shape: which **fields**, whether they're **required**, an optional **check** for present values, an optional **when** condition, and its **examples**. Six built-in checks (`matches`, `oneOf`, `min`, `atMost`, `minAge`, `maxAge`) and three combinators (`allOf`, `anyOf`, `not`) cover all 12 shipped rules. Each built-in is a short Java record in `Check.java`, so the primitives are type-safe and unit tested, while checks built from them, the fields and the rules are configuration.
 
 **Why this over the alternatives:**
 
@@ -43,7 +43,7 @@ Each rule has the same small shape: which **fields**, whether they're **required
 | Java code per rule (my first version) | No | Compile-time | Fails the core constraint. The git history shows the move away from it. |
 | **Declarative files + composable checks** | **Yes** | **Validated on load: unknown fields, wrong types, typos and bad regexes are all rejected** | **Chosen** |
 | Expression language (SpEL or similar) in config | Yes | Errors surface only at run time, and an injection risk needs sandboxing | Too powerful for these rules and harder to review |
-| Database table | Yes | Needs an admin UI, migrations and an extra runtime dependency | Overkill for 11 rules. The loader could read from a database later without other changes. |
+| Database table | Yes | Needs an admin UI, migrations and an extra runtime dependency | Overkill for 12 rules. The loader could read from a database later without other changes. |
 
 The trade-off: a genuinely new *primitive* (say, "SSN not on a deny-list held in a database") needs a small code change, a new `Check` record. That's deliberate. Most new checks are combinations, for example "nine digits and not starting with 9" is `allOf: [nineDigits, not: { matches: '9.*' }]`, and need no code. Only logic that can't be expressed that way gets compiled and tested.
 
@@ -108,8 +108,8 @@ Two rules can fail together, but they can't contradict each other, because each 
 
 - **Concurrent by design.** Rules are stateless predicates over an immutable record, and the rule list is immutable. So the engine is safe to call from many threads at once with no locking: every HTTP request is validated on its own Tomcat thread, and reloads never block validations.
 - **The batch endpoint** validates applications in parallel on a **dedicated thread pool** and keeps results in request order. It doesn't use `parallelStream()`, because that runs on the JVM-wide common pool, where one large batch could starve unrelated parallel work. The pool is sized by `fafsa.edits.batch-threads` (default: one thread per processor, since the work is CPU-bound). Its threads are named `fafsa-batch-N`, and its size, activity and queue length are published as `executor.*` metrics. Batches are capped at 1000 to bound memory and request time.
-- **Cheap per application.** One pass over the 14 schema fields, then about 11 predicate calls with no I/O. Regexes and named checks are compiled once, when the files are loaded, and field lookups are map reads with no reflection.
-- **What I deliberately didn't parallelize:** the rules within one application. Eleven microsecond-scale checks cost less than handing work between threads, so parallelism pays off across applications, not across rules. Virtual threads wouldn't help either, because the work is CPU-bound.
+- **Cheap per application.** One pass over the 14 schema fields, then about 12 predicate calls with no I/O. Regexes and named checks are compiled once, when the files are loaded, and field lookups are map reads with no reflection.
+- **What I deliberately didn't parallelize:** the rules within one application. Twelve microsecond-scale checks cost less than handing work between threads, so parallelism pays off across applications, not across rules. Virtual threads wouldn't help either, because the work is CPU-bound.
 - **At FAFSA scale** (millions of applications, with a peak around October 1), I'd put the engine behind a queue (Kafka or SQS) and scale consumers horizontally, rather than grow the HTTP batch. The engine has no HTTP dependency, so it would be reused unchanged.
 
 ### Extensibility
@@ -157,7 +157,7 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 - **State codes**: the 50 states, DC, and the territories FAFSA accepts (AS, FM, GU, MH, MP, PR, PW, VI). Codes must be uppercase, and `ca` is rejected rather than silently corrected, because the edit's job is to report bad data.
 - **Married household**: a married student's household must be at least 2 (student and spouse).
 - **Spouse info** means first name, last name and SSN are all present (non-blank). Spouse info sent by a single applicant is ignored.
-- **Blank text counts as missing** for `required` fields.
+- **Names can't be blank.** Student first and last name are required (`student-name`), and so are the spouse's when married. Blank or whitespace-only text counts as missing for every `required` field, so `"   "` fails the same way an omitted name does.
 - **Parent income of 0 is valid**: the rule checks that it was reported, not that it's positive.
 - **Income** is `BigDecimal`, because it's money. Cents are allowed.
 - **Choice values** are case-insensitive (`dependent` and `DEPENDENT`). Fields not in `fields.yml` are ignored in a request, but unknown properties in the **configuration files** are rejected, because there a typo would silently change a rule.
@@ -173,11 +173,11 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 
 ## Testing strategy
 
-There are two layers. The **code** is covered by 162 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **configuration** is covered by 74 examples that live next to it: 55 in `rules.yml` and 19 in `checks.yml`. None of the Java tests is specific to one rule, check or FAFSA field, so changing the configuration never needs a Java change.
+There are two layers. The **code** is covered by 163 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **configuration** is covered by 78 examples that live next to it: 59 in `rules.yml` and 19 in `checks.yml`. None of the Java tests is specific to one rule, check or FAFSA field, so changing the configuration never needs a Java change.
 
 | What | Test class | Approach |
 |---|---|---|
-| Every shipped check and rule | `ShippedConfigTest` + the examples in `checks.yml` and `rules.yml` | Loads the real folder as production does, which runs all 74 examples: the 14th birthday versus one day later, 8/9/10-digit SSNs with dashes, letters and spaces, income 0 versus -0.01, college = household, a married household of 1 versus 2, and so on. Also asserts priority order and severities. |
+| Every shipped check and rule | `ShippedConfigTest` + the examples in `checks.yml` and `rules.yml` | Loads the real folder as production does, which runs all 78 examples: the 14th birthday versus one day later, 8/9/10-digit SSNs with dashes, letters and spaces, income 0 versus -0.01, college = household, a married household of 1 versus 2, and so on. Also asserts priority order and severities. |
 | Checks | `CheckTest` | Each built-in, with boundaries; `allOf`/`anyOf`/`not`; type consistency; named-check resolution |
 | Reading requests | `SchemaTest` | Each field type: what it accepts, what's a 400 and its wording, nested paths, every problem reported at once |
 | Rule semantics | `RuleDefinitionTest` | `required` versus missing or blank values, multiple fields, `when` conditions |

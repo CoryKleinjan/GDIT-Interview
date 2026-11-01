@@ -4,9 +4,9 @@ A Spring Boot service that applies FAFSA "edit" rules to an application and repo
 
 - The edit configuration lives in three YAML files, **not in code**: `fields.yml` (the application's fields and their types), `checks.yml` (named, reusable checks) and `rules.yml` (the rules). You can add, change or remove a field, check or rule by editing a file, with no rebuild, redeploy or restart.
 - Every check and rule carries its own **examples** (values or applications it must pass, fail, or not apply to). They're verified every time the files load, so a check or rule that doesn't behave as described never goes live.
-- The shipped rule set has the 7 required edits plus 4 more: marital and dependency status, a married student's household size, and a warning-level age plausibility check.
+- The shipped rule set has the 7 required edits plus 5 more: marital and dependency status, non-blank student names, a married student's household size, and a warning-level age plausibility check.
 - Java 21, Spring Boot 3.5, Maven (wrapper included).
-- 162 JUnit tests plus 74 YAML examples (55 rule, 19 check), **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
+- 163 JUnit tests plus 78 YAML examples (59 rule, 19 check), **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
 
 Design reasoning is in [DECISIONS.md](DECISIONS.md).
 
@@ -173,21 +173,22 @@ Types are `text`, `integer`, `number`, `date` (YYYY-MM-DD) and `choice` (needs `
 
 ### Rules
 
-They run, and are reported, They run, and are reported, **top to bottom: file order is priority**. Every rule always runs, so an applicant sees every problem in one response.
+They run, and are reported, **top to bottom: file order is priority**. Every rule always runs, so an applicant sees every problem in one response.
 
 | # | Id | Rule | Severity | Applies when |
 |---|---|---|---|---|
 | 1 | `marital-status` | Marital status is present | ERROR | always |
 | 2 | `dependency-status` | Dependency status is present | ERROR | always |
-| 3 | `student-age` | Date of birth is present and the student is at least 14 | ERROR | always |
-| 4 | `ssn-format` | SSN is exactly 9 digits | ERROR | always |
-| 5 | `dependent-parent-income` | Parent income is present | ERROR | dependent |
-| 6 | `non-negative-income` | Student and parent income are not negative | ERROR | always |
-| 7 | `married-spouse-info` | Spouse first name, last name and SSN are present | ERROR | married |
-| 8 | `household-college-count` | Both counts are present, and college ≤ household | ERROR | always |
-| 9 | `married-household-includes-spouse` | Number in household is at least 2 | ERROR | married |
-| 10 | `state-code` | State is a valid US state, DC or territory code | ERROR | always |
-| 11 | `student-age-plausible` | Student is not older than 120 | WARNING | always |
+| 3 | `student-name` | Student first and last name are present and not blank | ERROR | always |
+| 4 | `student-age` | Date of birth is present and the student is at least 14 | ERROR | always |
+| 5 | `ssn-format` | SSN is exactly 9 digits | ERROR | always |
+| 6 | `dependent-parent-income` | Parent income is present | ERROR | dependent |
+| 7 | `non-negative-income` | Student and parent income are not negative | ERROR | always |
+| 8 | `married-spouse-info` | Spouse first name, last name and SSN are present and not blank | ERROR | married |
+| 9 | `household-college-count` | Both counts are present, and college ≤ household | ERROR | always |
+| 10 | `married-household-includes-spouse` | Number in household is at least 2 | ERROR | married |
+| 11 | `state-code` | State is a valid US state, DC or territory code | ERROR | always |
+| 12 | `student-age-plausible` | Student is not older than 120 | WARNING | always |
 
 ### Writing a rule
 

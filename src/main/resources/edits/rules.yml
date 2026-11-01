@@ -40,6 +40,19 @@ rules:
       pass: [ { dependencyStatus: dependent }, { dependencyStatus: independent } ]
       fail: [ {} ]
 
+  - id: student-name
+    severity: ERROR
+    message: Student first and last name are required and cannot be blank.
+    fields: [studentInfo.firstName, studentInfo.lastName]
+    required: true
+    examples:
+      pass: [ { studentInfo.firstName: Jane, studentInfo.lastName: Smith } ]
+      fail:
+        - {}
+        - { studentInfo.lastName: Smith }
+        - { studentInfo.firstName: Jane, studentInfo.lastName: '' }
+        - { studentInfo.firstName: '   ', studentInfo.lastName: Smith }
+
   - id: student-age
     severity: ERROR
     message: Student must be at least 14 years old. Check that the date of birth is correct (YYYY-MM-DD).
