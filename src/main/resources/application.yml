@@ -23,3 +23,5 @@ fafsa:
     # The edit rules. Point this at a file outside the jar, e.g. file:/etc/fafsa/rules.yml,
     # to add, change or remove rules without a deployment.
     rules-location: classpath:rules.yml
+    # How often to check the rule file for changes. A changed file goes live only if it is entirely valid.
+    reload-interval: 10s
