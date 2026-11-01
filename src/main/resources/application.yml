@@ -5,3 +5,13 @@ spring:
     mapper:
       accept-case-insensitive-enums: true
     default-property-inclusion: non_null
+
+fafsa:
+  edits:
+    # One entry per rule id, in the order rules are applied and reported.
+    # severity: ERROR (makes the application INVALID) | WARNING (VALID_WITH_WARNINGS) | INFO (no effect on status)
+    # enabled: defaults to true. Messages say what is wrong and how to fix it.
+    rules:
+      student-age:
+        severity: ERROR
+        message: Student must be at least 14 years old. Check that the date of birth is correct (YYYY-MM-DD).
