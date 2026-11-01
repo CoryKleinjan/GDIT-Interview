@@ -89,7 +89,7 @@ class RuleDefinitionTest {
     }
 
     private static RuleDefinition definition(List<String> fields, boolean required, Check check, Condition when) {
-        return new RuleDefinition("rule", Severity.WARNING, null, "Fix it.", fields, required, check, when);
+        return new RuleDefinition("rule", Severity.WARNING, null, "Fix it.", fields, required, check, when, null);
     }
 
     private static boolean passes(RuleDefinition definition, ApplicationBuilder application) {

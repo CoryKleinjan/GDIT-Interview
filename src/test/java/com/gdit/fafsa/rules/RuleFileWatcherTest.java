@@ -99,10 +99,11 @@ class RuleFileWatcherTest {
     }
 
     private static String rules(String... ids) {
-        var yaml = new StringBuilder("rules:\n");
+        var yaml = new StringBuilder("examplesAsOf: 2026-11-01\nrules:\n");
         for (String id : ids) {
             yaml.append("  - { id: ").append(id)
-                    .append(", severity: ERROR, message: m, fields: [studentInfo.ssn], required: true }\n");
+                    .append(", severity: ERROR, message: m, fields: [studentInfo.ssn], required: true,")
+                    .append(" examples: { pass: [ { studentInfo.ssn: '1' } ], fail: [ {} ] } }\n");
         }
         return yaml.toString();
     }
