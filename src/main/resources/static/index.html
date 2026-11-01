@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FAFSA Edit Tester</title>
+<!--
+  Manual testing page for the edit rule service. Plain HTML and JavaScript, no build step: it calls the same
+  public endpoints as any client (POST /api/v1/applications/validate, GET /api/v1/rules).
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #5d6676; --border: #d9dde4; --accent: #2457c5;
+    --pass: #1f7a3f; --pass-bg: #e3f4e8; --fail: #b42318; --fail-bg: #fde8e6;
+    --warn: #8a5a00; --warn-bg: #fff2d6; --na: #5d6676; --na-bg: #eef0f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1b1f27; --text: #e6e9ef; --muted: #9aa3b2; --border: #2e3440; --accent: #7aa2ff;
+      --pass: #6fd08f; --pass-bg: #173323; --fail: #ff8a80; --fail-bg: #3a1a18;
+      --warn: #ffc65c; --warn-bg: #3a2c10; --na: #9aa3b2; --na-bg: #252a33;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+  header { padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--panel); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 16px; padding: 16px 24px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; min-width: 0; }
+  h2 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  h2 .spacer { flex: 1; }
+  fieldset { border: 0; margin: 0 0 12px; padding: 0; }
+  legend { font-weight: 600; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+  input, select, textarea {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 8px; width: 100%;
+  }
+  input.flagged, select.flagged { border-color: var(--fail); box-shadow: 0 0 0 1px var(--fail); }
+  textarea { font-family: ui-monospace, monospace; font-size: 12px; min-height: 420px; resize: vertical; }
+  button {
+    font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text);
+    border-radius: 6px; padding: 6px 12px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .6; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .tabs button[aria-selected="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  .hidden { display: none; }
+  .status { font-weight: 700; padding: 4px 10px; border-radius: 999px; font-size: 13px; }
+  .VALID { color: var(--pass); background: var(--pass-bg); }
+  .VALID_WITH_WARNINGS { color: var(--warn); background: var(--warn-bg); }
+  .INVALID { color: var(--fail); background: var(--fail-bg); }
+  .muted { color: var(--muted); }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  code { font-family: ui-monospace, monospace; font-size: 12px; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .PASSED { color: var(--pass); background: var(--pass-bg); }
+  .FAILED-ERROR { color: var(--fail); background: var(--fail-bg); }
+  .FAILED-WARNING, .FAILED-INFO { color: var(--warn); background: var(--warn-bg); }
+  .NOT_APPLICABLE { color: var(--na); background: var(--na-bg); }
+  tr[data-outcome="FAILED-ERROR"] td:first-child { box-shadow: inset 3px 0 var(--fail); }
+  tr[data-outcome="FAILED-WARNING"] td:first-child, tr[data-outcome="FAILED-INFO"] td:first-child { box-shadow: inset 3px 0 var(--warn); }
+  td.id code { white-space: nowrap; }
+  pre.problem { background: var(--fail-bg); color: var(--fail); padding: 12px; border-radius: 6px; white-space: pre-wrap; margin: 0; }
+  .stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  main > section { align-self: start; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FAFSA Edit Tester</h1>
+  <p>Validate an application against the live rules. Edit <code>rules.yml</code> and the rules list updates after the next reload.</p>
+</header>
+
+<main>
+  <section aria-labelledby="application-heading">
+    <h2 id="application-heading">Application</h2>
+    <div class="row">
+      <button type="button" data-sample="valid">Load valid sample</button>
+      <button type="button" data-sample="invalid">Load invalid sample</button>
+      <button type="button" id="clear">Clear</button>
+    </div>
+    <div class="row tabs" role="tablist">
+      <button type="button" role="tab" id="form-tab" aria-selected="true">Form</button>
+      <button type="button" role="tab" id="json-tab" aria-selected="false">JSON</button>
+    </div>
+
+    <form id="form" autocomplete="off">
+      <fieldset>
+        <legend>Student</legend>
+        <div class="grid">
+          <label>First name <input data-path="studentInfo.firstName"></label>
+          <label>Last name <input data-path="studentInfo.lastName"></label>
+          <label>SSN <input data-path="studentInfo.ssn" placeholder="123456789"></label>
+          <label>Date of birth <input data-path="studentInfo.dateOfBirth" placeholder="YYYY-MM-DD"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Status</legend>
+        <div class="grid">
+          <label>Dependency status
+            <select data-path="dependencyStatus">
+              <option value="">(missing)</option><option>dependent</option><option>independent</option>
+            </select>
+          </label>
+          <label>Marital status
+            <select data-path="maritalStatus">
+              <option value="">(missing)</option><option>single</option><option>married</option>
+            </select>
+          </label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Spouse</legend>
+        <div class="grid">
+          <label>First name <input data-path="spouseInfo.firstName"></label>
+          <label>Last name <input data-path="spouseInfo.lastName"></label>
+          <label>SSN <input data-path="spouseInfo.ssn"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Household and income</legend>
+        <div class="grid">
+          <label>Number in household <input data-path="household.numberInHousehold" data-number inputmode="numeric"></label>
+          <label>Number in college <input data-path="household.numberInCollege" data-number inputmode="numeric"></label>
+          <label>Student income <input data-path="income.studentIncome" data-number inputmode="decimal"></label>
+          <label>Parent income <input data-path="income.parentIncome" data-number inputmode="decimal"></label>
+          <label>State of residence <input data-path="stateOfResidence" placeholder="CA" maxlength="10"></label>
+        </div>
+      </fieldset>
+    </form>
+
+    <div id="json-panel" class="hidden">
+      <textarea id="json" spellcheck="false" aria-label="Application JSON"></textarea>
+      <p class="muted">Anything goes here, including malformed JSON, to see how the API answers.</p>
+    </div>
+
+    <div class="row">
+      <button type="button" class="primary" id="validate">Validate</button>
+      <span id="validate-note" class="muted"></span>
+    </div>
+  </section>
+
+  <div class="stack">
+    <section aria-labelledby="result-heading" aria-live="polite">
+      <h2 id="result-heading">Result <span id="status"></span></h2>
+      <div id="result"><p class="muted">Load a sample or fill in the form, then press Validate.</p></div>
+    </section>
+
+    <section aria-labelledby="rules-heading">
+      <h2 id="rules-heading">Live rules <span id="rule-count" class="muted"></span><span class="spacer"></span>
+        <button type="button" id="refresh-rules">Refresh</button></h2>
+      <div id="rules" class="table-wrap"></div>
+      <p class="muted" id="rules-note"></p>
+    </section>
+  </div>
+</main>
+
+<script>
+const SAMPLES = {
+  valid: {
+    studentInfo: { firstName: "Jane", lastName: "Smith", ssn: "123456789", dateOfBirth: "2003-05-15" },
+    dependencyStatus: "dependent", maritalStatus: "single",
+    household: { numberInHousehold: 4, numberInCollege: 1 },
+    income: { studentIncome: 5000, parentIncome: 65000 },
+    stateOfResidence: "CA"
+  },
+  invalid: {
+    studentInfo: { firstName: "John", lastName: "Doe", ssn: "invalid", dateOfBirth: "2015-01-01" },
+    dependencyStatus: "dependent", maritalStatus: "married",
+    household: { numberInHousehold: 2, numberInCollege: 5 },
+    income: { studentIncome: -1000 },
+    stateOfResidence: "XX"
+  }
+};
+
+const $ = (selector) => document.querySelector(selector);
+const inputs = [...document.querySelectorAll("[data-path]")];
+let mode = "form";
+
+// Form <-> JSON. Empty inputs are left out, which is how the API sees a missing value.
+function formToApplication() {
+  const application = {};
+  for (const input of inputs) {
+    const raw = input.value.trim();
+    if (raw === "") continue;
+    const value = input.hasAttribute("data-number") && !isNaN(Number(raw)) ? Number(raw) : raw;
+    const [section, field] = input.dataset.path.split(".");
+    if (field) (application[section] ??= {})[field] = value;
+    else application[section] = value;
+  }
+  return application;
+}
+
+function applicationToForm(application) {
+  for (const input of inputs) {
+    const [section, field] = input.dataset.path.split(".");
+    const value = field ? application?.[section]?.[field] : application?.[section];
+    // Selects use lowercase options; the API accepts either case.
+    input.value = value == null ? "" : input.matches("select") ? String(value).toLowerCase() : String(value);
+  }
+}
+
+function currentJson() {
+  return mode === "form" ? JSON.stringify(formToApplication(), null, 2) : $("#json").value;
+}
+
+function showMode(next) {
+  if (next === mode) return;
+  if (next === "json") {
+    $("#json").value = JSON.stringify(formToApplication(), null, 2);
+  } else {
+    try { applicationToForm(JSON.parse($("#json").value || "{}")); }
+    catch { $("#validate-note").textContent = "The JSON doesn't parse, so the form wasn't updated."; return; }
+  }
+  mode = next;
+  $("#form").classList.toggle("hidden", mode !== "form");
+  $("#json-panel").classList.toggle("hidden", mode !== "json");
+  $("#form-tab").setAttribute("aria-selected", mode === "form");
+  $("#json-tab").setAttribute("aria-selected", mode === "json");
+  $("#validate-note").textContent = "";
+}
+
+function load(application) {
+  applicationToForm(application);
+  $("#json").value = JSON.stringify(application, null, 2);
+  clearFlags();
+}
+
+function clearFlags() {
+  inputs.forEach((input) => input.classList.remove("flagged"));
+}
+
+// Results
+const escapeHtml = (text) => String(text ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function outcomeClass(result) {
+  return result.outcome === "FAILED" ? `FAILED-${result.severity}` : result.outcome;
+}
+
+function renderResult(result) {
+  $("#status").innerHTML = `<span class="status ${result.status}">${result.status.replaceAll("_", " ")}</span>`;
+  const failed = result.results.filter((r) => r.outcome === "FAILED").length;
+  const rows = result.results.map((r) => `
+    <tr data-outcome="${outcomeClass(r)}">
+      <td class="id"><code>${escapeHtml(r.ruleId)}</code></td>
+      <td><span class="pill ${outcomeClass(r)}">${r.outcome.replace("_", " ")}</span></td>
+      <td>${escapeHtml(r.severity)}</td>
+      <td>${escapeHtml(r.message ?? "")}</td>
+      <td>${r.fields.map((f) => `<code>${escapeHtml(f)}</code>`).join("<br>")}</td>
+    </tr>`).join("");
+  $("#result").innerHTML = `
+    <p class="muted">${result.results.length} rules checked, ${failed} failed.</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Rule</th><th>Outcome</th><th>Severity</th><th>Message</th><th>Fields</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  clearFlags();
+  const flagged = new Set(result.results.filter((r) => r.outcome === "FAILED").flatMap((r) => r.fields));
+  inputs.filter((input) => flagged.has(input.dataset.path)).forEach((input) => input.classList.add("flagged"));
+}
+
+function renderProblem(httpStatus, problem) {
+  $("#status").innerHTML = `<span class="status INVALID">HTTP ${httpStatus}</span>`;
+  const details = [problem.detail, ...(problem.errors ?? [])].filter(Boolean).join("\n");
+  $("#result").innerHTML = `<p class="muted">The request couldn't be evaluated (${escapeHtml(problem.title ?? "error")}).</p>
+    <pre class="problem">${escapeHtml(details || JSON.stringify(problem, null, 2))}</pre>`;
+  clearFlags();
+}
+
+async function validate() {
+  const button = $("#validate");
+  button.disabled = true;
+  $("#validate-note").textContent = "Validating...";
+  try {
+    const response = await fetch("api/v1/applications/validate", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: currentJson()
+    });
+    const body = await response.json().catch(() => ({ detail: "The response wasn't JSON." }));
+    response.ok ? renderResult(body) : renderProblem(response.status, body);
+    $("#validate-note").textContent = `Checked at ${new Date().toLocaleTimeString()}`;
+  } catch (error) {
+    renderProblem("-", { title: "network error", detail: `Couldn't reach the service: ${error.message}` });
+    $("#validate-note").textContent = "";
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// Live rules: refreshed on demand, every 10 seconds, and when the tab regains focus.
+async function loadRules() {
+  try {
+    const response = await fetch("api/v1/rules");
+    const rules = await response.json();
+    $("#rule-count").textContent = `(${rules.length})`;
+    $("#rules").innerHTML = `<table>
+      <thead><tr><th>#</th><th>Rule</th><th>Severity</th><th>Fields</th><th>Message</th></tr></thead>
+      <tbody>${rules.map((rule, i) => `<tr>
+        <td class="muted">${i + 1}</td>
+        <td class="id"><code>${escapeHtml(rule.id)}</code></td>
+        <td>${escapeHtml(rule.severity)}</td>
+        <td>${rule.fields.map((f) => `<code>${escapeHtml(f)}</code>`).join("<br>")}</td>
+        <td>${escapeHtml(rule.message)}</td></tr>`).join("")}</tbody></table>`;
+    $("#rules-note").textContent = `Loaded at ${new Date().toLocaleTimeString()}. Rules run top to bottom.`;
+  } catch (error) {
+    $("#rules-note").textContent = `Couldn't load rules: ${error.message}`;
+  }
+}
+
+document.querySelectorAll("[data-sample]").forEach((button) =>
+    button.addEventListener("click", () => load(structuredClone(SAMPLES[button.dataset.sample]))));
+$("#clear").addEventListener("click", () => load({}));
+$("#form-tab").addEventListener("click", () => showMode("form"));
+$("#json-tab").addEventListener("click", () => showMode("json"));
+$("#validate").addEventListener("click", validate);
+$("#refresh-rules").addEventListener("click", loadRules);
+window.addEventListener("focus", loadRules);
+setInterval(loadRules, 10000);
+
+load(structuredClone(SAMPLES.valid));
+loadRules();
+</script>
+</body>
+</html>
