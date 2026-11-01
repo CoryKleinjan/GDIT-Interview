@@ -16,14 +16,20 @@ Prerequisite: JDK 21. Maven is optional, because `./mvnw` downloads the right ve
 
 ```bash
 ./mvnw verify            # compile, run all tests, enforce 100% line + branch coverage
-./mvnw spring-boot:run   # start on http://localhost:8080 with the bundled configuration
+./mvnw spring-boot:run   # start on http://localhost:8080, live-reloading src/main/resources/edits/
 ```
+
+On Windows use `mvnw.cmd` instead of `./mvnw`.
 
 Then open **http://localhost:8080** for the manual testing page (see [Manual testing UI](#manual-testing-ui)).
 
 The coverage report is written to `target/site/jacoco/index.html`.
 
-To run with an external configuration folder you can edit live:
+### Live-editing the configuration
+
+**With `./mvnw spring-boot:run`, edit the files in `src/main/resources/edits/` directly.** The app reads that folder (not the copies Maven puts in `target/classes`), and a saved change is live within 10 seconds, with no restart. The startup log names the folder it's watching (`"location": "URL [file:src/main/resources/edits/]"`), and `GET /api/v1/rules` shows what's loaded.
+
+Starting the app another way, for example with the IDE's Run button on `FafsaEditProcessorApplication` or with `java -jar`, uses the copy bundled at build time, which doesn't change when you edit the source. To live-edit in those cases, pass the folder yourself, for example `--fafsa.edits.config-location=file:src/main/resources/edits/` as a program argument, or an external folder:
 
 ```bash
 ./mvnw package
@@ -263,7 +269,7 @@ Only a genuinely new *built-in* check, one that can't be written by combining th
 
 - **Input:** a form built from `GET /api/v1/fields`, so it always matches `fields.yml`, or a raw JSON tab (send malformed JSON to see the 400 response). Buttons load the spec's valid and invalid samples.
 - **Validate:** shows the overall status and a colour-coded row per rule: green for passed, red for a failed ERROR, amber for a failed WARNING, grey for not applicable. Fields named by failed rules are outlined in the form.
-- **Live rules:** the rules currently loaded, in priority order. The list and the form refresh every 10 seconds and when you return to the tab. Run with an external configuration folder (see [Changing rules without a deployment](#changing-rules-without-a-deployment)), edit it, and you'll see the change here and in the next validation, with no restart.
+- **Live rules:** the rules currently loaded, in priority order. The list and the form refresh every 10 seconds and when you return to the tab. Start with `./mvnw spring-boot:run`, edit a file in `src/main/resources/edits/`, and you'll see the change here and in the next validation, with no restart.
 
 ## Project layout
 

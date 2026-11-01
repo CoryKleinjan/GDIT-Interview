@@ -37,6 +37,7 @@ public class ConfigWatcher {
         this.meters = meters;
         this.loadedVersion = version();
         engine.replace(loader.load(directory));
+        log.atInfo().addKeyValue("location", directory.getDescription()).log("Edit configuration loaded; watching for changes");
     }
 
     @Scheduled(fixedDelayString = "${fafsa.edits.reload-interval}")

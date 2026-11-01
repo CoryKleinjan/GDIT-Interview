@@ -51,6 +51,13 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- spring-boot:run reads the YAML in the source tree, so edits there are live-reloaded.
+                         (The packaged jar reads its own bundled copy.) -->
+                    <arguments>
+                        <argument>--fafsa.edits.config-location=file:src/main/resources/edits/</argument>
+                    </arguments>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
