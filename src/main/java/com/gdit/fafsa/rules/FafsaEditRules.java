@@ -53,4 +53,12 @@ public class FafsaEditRules {
                         "income.parentIncome")
                 .onlyWhen(FafsaApplication::isDependent);
     }
+
+    @Bean
+    public EditRule nonNegativeIncome() {
+        return EditRule.of("non-negative-income",
+                application -> isNonNegative(application.income().studentIncome())
+                        && isNonNegative(application.income().parentIncome()),
+                "income.studentIncome", "income.parentIncome");
+    }
 }

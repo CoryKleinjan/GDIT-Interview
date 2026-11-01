@@ -22,4 +22,9 @@ final class Checks {
     static boolean matches(String value, Pattern pattern) {
         return value != null && pattern.matcher(value).matches();
     }
+
+    /** True for null: a missing amount is not a negative one (whether it is required is a separate rule). */
+    static boolean isNonNegative(BigDecimal amount) {
+        return amount == null || amount.signum() >= 0;
+    }
 }

@@ -21,3 +21,6 @@ fafsa:
       dependent-parent-income:
         severity: ERROR
         message: Parent income is required for a dependent student. Enter 0 if parents had no income.
+      non-negative-income:
+        severity: ERROR
+        message: Income cannot be negative. Enter 0 for no income or a loss.
