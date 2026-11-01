@@ -104,4 +104,22 @@ class FafsaEditRulesTest {
             assertThat(applies(rule, aValidApplication().independent())).isFalse();
         }
     }
+
+    @Nested
+    class NonNegativeIncome {
+
+        private final EditRule rule = rules.nonNegativeIncome();
+
+        @ParameterizedTest(name = "student={0}, parent={1}")
+        @CsvSource({"0, 0", "5000, 65000", "5000,", ", 65000", ","})
+        void passesForZeroPositiveOrMissingIncome(BigDecimal studentIncome, BigDecimal parentIncome) {
+            assertThat(passes(rule, aValidApplication().income(studentIncome, parentIncome))).isTrue();
+        }
+
+        @ParameterizedTest(name = "student={0}, parent={1}")
+        @CsvSource({"-1, 0", "0, -1", "-0.01,", "-1000, -1000"})
+        void failsWhenAnyIncomeIsNegative(BigDecimal studentIncome, BigDecimal parentIncome) {
+            assertThat(passes(rule, aValidApplication().income(studentIncome, parentIncome))).isFalse();
+        }
+    }
 }
