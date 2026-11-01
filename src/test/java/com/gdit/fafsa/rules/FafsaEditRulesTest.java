@@ -187,4 +187,26 @@ class FafsaEditRulesTest {
             assertThat(applies(rule, aValidApplication())).isFalse();
         }
     }
+
+    @Nested
+    class StudentAgePlausible {
+
+        private final EditRule rule = rules.studentAgePlausible(CLOCK);
+
+        @Test
+        void passesAtAge120() {
+            assertThat(passes(rule, aValidApplication().dateOfBirth(TODAY.minusYears(121).plusDays(1)))).isTrue();
+        }
+
+        @Test
+        void failsAtAge121() {
+            assertThat(passes(rule, aValidApplication().dateOfBirth(TODAY.minusYears(121)))).isFalse();
+        }
+
+        @Test
+        void appliesOnlyWhenDateOfBirthIsPresent() {
+            assertThat(applies(rule, aValidApplication())).isTrue();
+            assertThat(applies(rule, aValidApplication().dateOfBirth(null))).isFalse();
+        }
+    }
 }
