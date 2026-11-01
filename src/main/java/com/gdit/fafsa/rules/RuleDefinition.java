@@ -17,6 +17,7 @@ import java.util.function.Predicate;
 /**
  * One rule as written in the rule file. Every listed field must pass: if it is missing (null or blank) it fails
  * only when {@code required} is true; if it is present it must satisfy {@code check}, when there is one.
+ * {@code examples} are the rule's own test cases, checked by the loader.
  */
 public record RuleDefinition(
         @NotBlank String id,
@@ -26,7 +27,8 @@ public record RuleDefinition(
         @NotEmpty List<@NotBlank String> fields,
         boolean required,
         @Valid Check check,
-        @Valid Condition when) {
+        @Valid Condition when,
+        @NotNull @Valid Examples examples) {
 
     public RuleDefinition {
         enabled = requireNonNullElse(enabled, true);

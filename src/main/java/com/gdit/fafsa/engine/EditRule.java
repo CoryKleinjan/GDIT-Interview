@@ -22,7 +22,7 @@ public record EditRule(
         @JsonIgnore Predicate<FafsaApplication> appliesTo,
         @JsonIgnore Predicate<FafsaApplication> check) {
 
-    RuleResult evaluate(FafsaApplication application) {
+    public RuleResult evaluate(FafsaApplication application) {
         if (!appliesTo.test(application)) {
             return result(Outcome.NOT_APPLICABLE, null);
         }

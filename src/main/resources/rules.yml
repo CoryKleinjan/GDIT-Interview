@@ -12,6 +12,12 @@
 #   check      optional test for present values:
 #                matches {regex} | oneOf {values} | min {value} | atMost {field} | minAge {years} | maxAge {years}
 #   when       optional condition { field, equals }; when false the rule reports NOT_APPLICABLE
+#   examples   the rule's tests: partial applications ({ field: value }) it must pass, fail, and (optionally)
+#              not apply to. Every rule needs at least one pass and one fail example. They are checked on
+#              every load and reload; a rule that does not behave as its examples say is rejected.
+
+# Examples are evaluated as if today were this date, so age examples never go stale.
+examplesAsOf: 2026-11-01
 
 rules:
   # Marital and dependency status come first: they decide which later rules apply.
@@ -20,12 +26,18 @@ rules:
     message: Marital status is required (single or married).
     fields: [maritalStatus]
     required: true
+    examples:
+      pass: [ { maritalStatus: single }, { maritalStatus: married } ]
+      fail: [ {} ]
 
   - id: dependency-status
     severity: ERROR
     message: Dependency status is required (dependent or independent).
     fields: [dependencyStatus]
     required: true
+    examples:
+      pass: [ { dependencyStatus: dependent }, { dependencyStatus: independent } ]
+      fail: [ {} ]
 
   - id: student-age
     severity: ERROR
@@ -33,6 +45,9 @@ rules:
     fields: [studentInfo.dateOfBirth]
     required: true
     check: { type: minAge, years: 14 }
+    examples:
+      pass: [ { studentInfo.dateOfBirth: 2012-11-01 }, { studentInfo.dateOfBirth: 2003-05-15 } ]  # 14 today; 23
+      fail: [ { studentInfo.dateOfBirth: 2012-11-02 }, { studentInfo.dateOfBirth: 2027-01-01 }, {} ]  # 14 tomorrow; future; missing
 
   - id: ssn-format
     severity: ERROR
@@ -40,6 +55,16 @@ rules:
     fields: [studentInfo.ssn]
     required: true
     check: { type: matches, regex: '\d{9}' }
+    examples:
+      pass: [ { studentInfo.ssn: '123456789' }, { studentInfo.ssn: '000000001' } ]
+      fail:
+        - { studentInfo.ssn: '12345678' }
+        - { studentInfo.ssn: '1234567890' }
+        - { studentInfo.ssn: '123-45-6789' }
+        - { studentInfo.ssn: '12345678a' }
+        - { studentInfo.ssn: ' 123456789' }
+        - { studentInfo.ssn: '' }
+        - {}
 
   - id: dependent-parent-income
     severity: ERROR
@@ -47,12 +72,19 @@ rules:
     fields: [income.parentIncome]
     required: true
     when: { field: dependencyStatus, equals: dependent }
+    examples:
+      pass: [ { dependencyStatus: dependent, income.parentIncome: 65000 }, { dependencyStatus: dependent, income.parentIncome: 0 } ]
+      fail: [ { dependencyStatus: dependent } ]
+      notApplicable: [ { dependencyStatus: independent }, {} ]
 
   - id: non-negative-income
     severity: ERROR
     message: Income cannot be negative. Enter 0 for no income or a loss.
     fields: [income.studentIncome, income.parentIncome]
     check: { type: min, value: 0 }
+    examples:
+      pass: [ { income.studentIncome: 5000, income.parentIncome: 65000 }, { income.studentIncome: 0 }, {} ]
+      fail: [ { income.studentIncome: -1000 }, { income.studentIncome: 0, income.parentIncome: -0.01 } ]
 
   - id: married-spouse-info
     severity: ERROR
@@ -60,6 +92,13 @@ rules:
     fields: [spouseInfo.firstName, spouseInfo.lastName, spouseInfo.ssn]
     required: true
     when: { field: maritalStatus, equals: married }
+    examples:
+      pass: [ { maritalStatus: married, spouseInfo.firstName: John, spouseInfo.lastName: Smith, spouseInfo.ssn: '987654321' } ]
+      fail:
+        - { maritalStatus: married }
+        - { maritalStatus: married, spouseInfo.firstName: John, spouseInfo.lastName: Smith }
+        - { maritalStatus: married, spouseInfo.firstName: '  ', spouseInfo.lastName: Smith, spouseInfo.ssn: '987654321' }
+      notApplicable: [ { maritalStatus: single }, {} ]
 
   # Household rules come after marital status, which decides who the household must include.
   - id: household-college-count
@@ -68,6 +107,12 @@ rules:
     fields: [household.numberInCollege, household.numberInHousehold]
     required: true
     check: { type: atMost, field: household.numberInHousehold }
+    examples:
+      pass: [ { household.numberInHousehold: 4, household.numberInCollege: 1 }, { household.numberInHousehold: 2, household.numberInCollege: 2 } ]
+      fail:
+        - { household.numberInHousehold: 2, household.numberInCollege: 5 }
+        - { household.numberInCollege: 1 }
+        - { household.numberInHousehold: 4 }
 
   - id: married-household-includes-spouse
     severity: ERROR
@@ -76,6 +121,10 @@ rules:
     required: true
     check: { type: min, value: 2 }
     when: { field: maritalStatus, equals: married }
+    examples:
+      pass: [ { maritalStatus: married, household.numberInHousehold: 2 } ]
+      fail: [ { maritalStatus: married, household.numberInHousehold: 1 }, { maritalStatus: married } ]
+      notApplicable: [ { maritalStatus: single, household.numberInHousehold: 1 } ]
 
   - id: state-code
     severity: ERROR
@@ -87,6 +136,9 @@ rules:
       values: [AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO,
                MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY,
                DC, AS, FM, GU, MH, MP, PR, PW, VI]
+    examples:
+      pass: [ { stateOfResidence: CA }, { stateOfResidence: DC }, { stateOfResidence: PR } ]
+      fail: [ { stateOfResidence: XX }, { stateOfResidence: ca }, { stateOfResidence: CAL }, {} ]
 
   # Not one of the seven required edits: a non-blocking sanity check (a missing date is reported by student-age).
   - id: student-age-plausible
@@ -94,3 +146,6 @@ rules:
     message: Student would be older than 120. Confirm the date of birth.
     fields: [studentInfo.dateOfBirth]
     check: { type: maxAge, years: 120 }
+    examples:
+      pass: [ { studentInfo.dateOfBirth: 1905-11-02 }, {} ]  # 120 today; missing is student-age's job
+      fail: [ { studentInfo.dateOfBirth: 1905-11-01 } ]      # 121 today
