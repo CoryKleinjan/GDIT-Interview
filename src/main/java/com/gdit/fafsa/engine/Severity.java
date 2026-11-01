@@ -1,6 +1,6 @@
 package com.gdit.fafsa.engine;
 
-/** How much a failed edit matters. Configured per rule in {@code application.yml}. */
+/** How much a failed edit matters. Set per rule in the rule file. */
 public enum Severity {
     /** The application cannot be processed until this is fixed. */
     ERROR,

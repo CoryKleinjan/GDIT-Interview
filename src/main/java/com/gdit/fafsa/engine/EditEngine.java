@@ -1,40 +1,36 @@
 package com.gdit.fafsa.engine;
 
-import static java.util.function.Function.identity;
-import static java.util.stream.Collectors.toMap;
-
 import com.gdit.fafsa.model.FafsaApplication;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Applies every enabled edit rule to an application and collects all results (it never stops at the first
- * failure), in the order the rules are registered. Rules are stateless, so one engine can validate many applications concurrently.
+ * Applies every rule, in order, to an application and collects all results: it never stops at the first
+ * failure, so an applicant can fix everything in one pass. The rule set can be swapped at any time; each
+ * validation uses the set that was current when it started. Rules are stateless, so one engine can validate
+ * many applications concurrently.
  */
 @Service
 public class EditEngine {
 
     private static final Logger log = LoggerFactory.getLogger(EditEngine.class);
 
-    private final List<ConfiguredRule> rules;
     private final MeterRegistry meters;
+    private volatile List<EditRule> rules = List.of();
 
-    public EditEngine(List<EditRule> rules, EditRulesProperties properties, MeterRegistry meters) {
-        Map<String, EditRule> rulesById = rules.stream().collect(toMap(EditRule::id, identity()));
-        if (!rulesById.keySet().equals(properties.rules().keySet())) {
-            throw new IllegalStateException("Every edit rule needs exactly one entry under fafsa.edits.rules. "
-                    + "Rules in code: " + rulesById.keySet() + ", configured: " + properties.rules().keySet());
-        }
-        // Results follow rule registration order, so overriding a setting at deploy time never reorders them.
-        this.rules = rules.stream()
-                .map(rule -> new ConfiguredRule(rule, properties.rules().get(rule.id())))
-                .filter(rule -> rule.settings().enabled())
-                .toList();
+    public EditEngine(MeterRegistry meters) {
         this.meters = meters;
+    }
+
+    public List<EditRule> rules() {
+        return rules;
+    }
+
+    public void replaceRules(List<EditRule> rules) {
+        this.rules = List.copyOf(rules);
     }
 
     public ValidationResult validate(FafsaApplication application) {
@@ -53,11 +49,5 @@ public class EditEngine {
                 .addKeyValue("status", result.status())
                 .addKeyValue("failedRules", failures.stream().map(RuleResult::ruleId).toList())
                 .log("Application validated");
-    }
-
-    private record ConfiguredRule(EditRule rule, RuleSettings settings) {
-        RuleResult evaluate(FafsaApplication application) {
-            return rule.evaluate(application, settings);
-        }
     }
 }

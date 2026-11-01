@@ -48,7 +48,7 @@ class RuleLoaderTest {
 
     @Test
     void rejectsUnparseableYaml() {
-        assertProblems(yaml("rules: [ { id: x"), "Unexpected end-of-input");
+        assertProblems(yaml("rules: [ { id: x"), "but got <stream end>");
     }
 
     @Test

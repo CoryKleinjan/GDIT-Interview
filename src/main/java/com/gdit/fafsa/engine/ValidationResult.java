@@ -2,7 +2,7 @@ package com.gdit.fafsa.engine;
 
 import java.util.List;
 
-/** Overall status plus every rule's result, in configured rule order. */
+/** Overall status plus every rule's result, in rule (priority) order. */
 public record ValidationResult(OverallStatus status, List<RuleResult> results) {
 
     static ValidationResult of(List<RuleResult> results) {

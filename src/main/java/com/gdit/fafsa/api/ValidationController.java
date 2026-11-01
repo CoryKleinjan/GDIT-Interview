@@ -24,7 +24,7 @@ public class ValidationController {
     }
 
     @PostMapping("/validate")
-    public ValidationResult validate(@Valid @RequestBody FafsaApplication application) {
+    public ValidationResult validate(@RequestBody FafsaApplication application) {
         return engine.validate(application);
     }
 

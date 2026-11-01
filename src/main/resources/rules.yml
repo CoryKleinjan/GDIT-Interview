@@ -1,0 +1,96 @@
+# FAFSA edit rules.
+#
+# Rules run, and are reported, top to bottom: order is priority. Every rule always runs, so an applicant
+# sees every problem at once. This file can live outside the jar and be edited without a deployment.
+#
+#   id         stable identifier, reported in results
+#   severity   ERROR (application INVALID) | WARNING (VALID_WITH_WARNINGS) | INFO (no effect on status)
+#   enabled    optional, default true
+#   message    shown when the rule fails: what is wrong and how to fix it
+#   fields     the fields the rule checks; every one must pass
+#   required   true: a missing (null or blank) value fails. false: a missing value passes
+#   check      optional test for present values:
+#                matches {regex} | oneOf {values} | min {value} | atMost {field} | minAge {years} | maxAge {years}
+#   when       optional condition { field, equals }; when false the rule reports NOT_APPLICABLE
+
+rules:
+  # Marital and dependency status come first: they decide which later rules apply.
+  - id: marital-status
+    severity: ERROR
+    message: Marital status is required (single or married).
+    fields: [maritalStatus]
+    required: true
+
+  - id: dependency-status
+    severity: ERROR
+    message: Dependency status is required (dependent or independent).
+    fields: [dependencyStatus]
+    required: true
+
+  - id: student-age
+    severity: ERROR
+    message: Student must be at least 14 years old. Check that the date of birth is correct (YYYY-MM-DD).
+    fields: [studentInfo.dateOfBirth]
+    required: true
+    check: { type: minAge, years: 14 }
+
+  - id: ssn-format
+    severity: ERROR
+    message: SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.
+    fields: [studentInfo.ssn]
+    required: true
+    check: { type: matches, regex: '\d{9}' }
+
+  - id: dependent-parent-income
+    severity: ERROR
+    message: Parent income is required for a dependent student. Enter 0 if parents had no income.
+    fields: [income.parentIncome]
+    required: true
+    when: { field: dependencyStatus, equals: dependent }
+
+  - id: non-negative-income
+    severity: ERROR
+    message: Income cannot be negative. Enter 0 for no income or a loss.
+    fields: [income.studentIncome, income.parentIncome]
+    check: { type: min, value: 0 }
+
+  - id: married-spouse-info
+    severity: ERROR
+    message: Spouse first name, last name and SSN are required when marital status is married.
+    fields: [spouseInfo.firstName, spouseInfo.lastName, spouseInfo.ssn]
+    required: true
+    when: { field: maritalStatus, equals: married }
+
+  # Household rules come after marital status, which decides who the household must include.
+  - id: household-college-count
+    severity: ERROR
+    message: Number in household and number in college are required, and number in college cannot exceed number in household.
+    fields: [household.numberInCollege, household.numberInHousehold]
+    required: true
+    check: { type: atMost, field: household.numberInHousehold }
+
+  - id: married-household-includes-spouse
+    severity: ERROR
+    message: A married student's household must include the student and spouse, so number in household must be at least 2.
+    fields: [household.numberInHousehold]
+    required: true
+    check: { type: min, value: 2 }
+    when: { field: maritalStatus, equals: married }
+
+  - id: state-code
+    severity: ERROR
+    message: State of residence must be a two-letter uppercase US state, DC or territory code, for example CA.
+    fields: [stateOfResidence]
+    required: true
+    check:
+      type: oneOf
+      values: [AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO,
+               MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY,
+               DC, AS, FM, GU, MH, MP, PR, PW, VI]
+
+  # Not one of the seven required edits: a non-blocking sanity check (a missing date is reported by student-age).
+  - id: student-age-plausible
+    severity: WARNING
+    message: Student would be older than 120. Confirm the date of birth.
+    fields: [studentInfo.dateOfBirth]
+    check: { type: maxAge, years: 120 }

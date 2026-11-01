@@ -2,7 +2,6 @@ package com.gdit.fafsa.model;
 
 import static java.util.Objects.requireNonNullElse;
 
-import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -11,12 +10,11 @@ import java.time.LocalDate;
  *
  * <p>Missing sections are replaced with empty ones so edit rules can read any field without null-checking
  * the section first. Missing <em>values</em> stay null and are reported by the rule that needs them.
- * Only the two statuses are mandatory, because they decide which conditional rules apply.
  */
 public record FafsaApplication(
         StudentInfo studentInfo,
-        @NotNull DependencyStatus dependencyStatus,
-        @NotNull MaritalStatus maritalStatus,
+        DependencyStatus dependencyStatus,
+        MaritalStatus maritalStatus,
         SpouseInfo spouseInfo,
         Household household,
         Income income,

@@ -20,31 +20,6 @@ management:
 
 fafsa:
   edits:
-    # One entry per rule id (rules are reported in the order they are declared in FafsaEditRules).
-    # severity: ERROR (makes the application INVALID) | WARNING (VALID_WITH_WARNINGS) | INFO (no effect on status)
-    # enabled: defaults to true. Messages say what is wrong and how to fix it.
-    rules:
-      student-age:
-        severity: ERROR
-        message: Student must be at least 14 years old. Check that the date of birth is correct (YYYY-MM-DD).
-      ssn-format:
-        severity: ERROR
-        message: SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.
-      dependent-parent-income:
-        severity: ERROR
-        message: Parent income is required for a dependent student. Enter 0 if parents had no income.
-      non-negative-income:
-        severity: ERROR
-        message: Income cannot be negative. Enter 0 for no income or a loss.
-      household-college-count:
-        severity: ERROR
-        message: Number in household and number in college are required, and number in college cannot exceed number in household.
-      state-code:
-        severity: ERROR
-        message: State of residence must be a two-letter uppercase US state, DC or territory code, for example CA.
-      married-spouse-info:
-        severity: ERROR
-        message: Spouse first name, last name and SSN are required when marital status is married.
-      student-age-plausible:
-        severity: WARNING
-        message: Student would be older than 120. Confirm the date of birth.
+    # The edit rules. Point this at a file outside the jar, e.g. file:/etc/fafsa/rules.yml,
+    # to add, change or remove rules without a deployment.
+    rules-location: classpath:rules.yml
