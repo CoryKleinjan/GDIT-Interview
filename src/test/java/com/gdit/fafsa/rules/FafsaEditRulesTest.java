@@ -159,4 +159,32 @@ class FafsaEditRulesTest {
             assertThat(passes(rule, aValidApplication().stateOfResidence(state))).isFalse();
         }
     }
+
+    @Nested
+    class MarriedSpouseInfo {
+
+        private final EditRule rule = rules.marriedSpouseInfo();
+
+        @Test
+        void passesWhenSpouseNameAndSsnArePresent() {
+            assertThat(passes(rule, aValidApplication().married(new SpouseInfo("John", "Smith", "987654321")))).isTrue();
+        }
+
+        @Test
+        void failsWhenSpouseSectionIsMissing() {
+            assertThat(passes(rule, aValidApplication().married(null))).isFalse();
+        }
+
+        @ParameterizedTest(name = "first={0}, last={1}, ssn={2}")
+        @CsvSource({", Smith, 987654321", "John, , 987654321", "John, Smith,", "'  ', Smith, 987654321"})
+        void failsWhenAnySpouseFieldIsBlank(String firstName, String lastName, String ssn) {
+            assertThat(passes(rule, aValidApplication().married(new SpouseInfo(firstName, lastName, ssn)))).isFalse();
+        }
+
+        @Test
+        void appliesOnlyToMarriedStudents() {
+            assertThat(applies(rule, aValidApplication().married(null))).isTrue();
+            assertThat(applies(rule, aValidApplication())).isFalse();
+        }
+    }
 }
