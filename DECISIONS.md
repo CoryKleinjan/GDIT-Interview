@@ -202,8 +202,9 @@ The git history shows the TDD loop: each `test: ... (red)` commit adds failing t
 
 ## Time spent
 
-About **1 hour** in total. The commit history runs from 16:13 to 17:10, with planning just before it. That hour covers the first implementation, the design review and rework, the testing UI, and moving fields and checks into YAML.
+About **1.5 hours** in total:
 
-- **TODO (Cory):** any review and walkthrough time after this
+- **Building with Claude Code: ~1 hour.** The commit history runs from 16:13 to 17:10, with planning just before it. This covers the first implementation, the design review and rework, the testing UI, and moving fields and checks into YAML.
+- **My review and walkthrough: ~30 minutes.**
 
 I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment and added with only a YAML entry, priority order with marital status before household, always running every rule, the married-household rule, a dedicated batch pool, reporting severity only on failures, a manual testing UI, and moving checks and application fields into YAML as well. Claude drafted the code and tests test first, and I reviewed the design and results.
