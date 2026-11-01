@@ -6,7 +6,7 @@ A Spring Boot service that applies FAFSA "edit" rules to an application and repo
 - Every check and rule carries its own **examples** (values or applications it must pass, fail, or not apply to). They're verified every time the files load, so a check or rule that doesn't behave as described never goes live.
 - The shipped rule set has the 7 required edits plus 5 more: marital and dependency status, non-blank student names, a married student's household size, and a warning-level age plausibility check.
 - Java 21, Spring Boot 3.5, Maven (wrapper included).
-- 163 JUnit tests plus 78 YAML examples (59 rule, 19 check), **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
+- 163 JUnit tests plus 86 YAML examples (60 rule, 26 check), **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
 
 Design reasoning is in [DECISIONS.md](DECISIONS.md).
 
@@ -98,7 +98,7 @@ curl -s -X POST http://localhost:8080/api/v1/applications/validate \
       "ruleId": "ssn-format",
       "outcome": "FAILED",
       "severity": "ERROR",
-      "message": "SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.",
+      "message": "SSN must be 9 digits, either 123456789 or 123-45-6789.",
       "fields": ["studentInfo.ssn"]
     },
     "... dependent-parent-income, non-negative-income, married-spouse-info, household-college-count, state-code: FAILED ...",
@@ -181,7 +181,7 @@ They run, and are reported, **top to bottom: file order is priority**. Every rul
 | 2 | `dependency-status` | Dependency status is present | ERROR | always |
 | 3 | `student-name` | Student first and last name are present and not blank | ERROR | always |
 | 4 | `student-age` | Date of birth is present and the student is at least 14 | ERROR | always |
-| 5 | `ssn-format` | SSN is exactly 9 digits | ERROR | always |
+| 5 | `ssn-format` | SSN is 9 digits, plain or as 123-45-6789 | ERROR | always |
 | 6 | `dependent-parent-income` | Parent income is present | ERROR | dependent |
 | 7 | `non-negative-income` | Student and parent income are not negative | ERROR | always |
 | 8 | `married-spouse-info` | Spouse first name, last name and SSN are present and not blank | ERROR | married |
@@ -232,16 +232,20 @@ A named check gives a check a name, a description and value examples, so rules c
 ```yaml
 examplesAsOf: 2026-11-01
 checks:
-  - name: nineDigits
-    description: Exactly nine digits, with no dashes or spaces.
-    check: { type: matches, regex: '\d{9}' }
+  - name: ssnFormat
+    description: Nine digits, either plain (123456789) or with dashes after the third and fifth digits (123-45-6789).
+    check:
+      type: anyOf
+      checks:
+        - { type: matches, regex: '\d{9}' }
+        - { type: matches, regex: '\d{3}-\d{2}-\d{4}' }
     examples:
       field: studentInfo.ssn             # the examples are read as this field's type
-      pass: ['123456789']
-      fail: ['123-45-6789', '']
+      pass: ['123456789', '123-45-6789']
+      fail: ['12-345-6789', '123-456789', '']
 ```
 
-A rule then uses `check: { type: nineDigits }`. A named check can use built-in checks and named checks defined above it, and can't reuse a built-in name. The shipped file defines `nineDigits`, `nonNegative` and `usStateOrTerritoryCode`.
+A rule then uses `check: { type: ssnFormat }`. A named check can use built-in checks and named checks defined above it, and can't reuse a built-in name. The shipped file defines `ssnFormat`, `nonNegative` and `usStateOrTerritoryCode`.
 
 ### Changing the configuration without a deployment
 

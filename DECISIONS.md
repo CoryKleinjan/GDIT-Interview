@@ -19,7 +19,7 @@ The whole edit configuration is data, in one folder, [`src/main/resources/edits/
 | File | Holds | Why it's separate |
 |---|---|---|
 | `fields.yml` | every field a request can carry, by JSON path, and its type (`text`, `integer`, `number`, `date`, `choice`) | Fields change least, and everything else is checked against them |
-| `checks.yml` | named, reusable checks built from the built-in checks with `allOf`, `anyOf` and `not` | A check like "nine digits" is written and proven once, then reused by any rule |
+| `checks.yml` | named, reusable checks built from the built-in checks with `allOf`, `anyOf` and `not` | A check like "SSN format" is written and proven once, then reused by any rule |
 | `rules.yml` | the rules, in priority order | What policy owners edit most |
 
 A rule looks like this:
@@ -45,11 +45,11 @@ Each rule has the same small shape: which **fields**, whether they're **required
 | Expression language (SpEL or similar) in config | Yes | Errors surface only at run time, and an injection risk needs sandboxing | Too powerful for these rules and harder to review |
 | Database table | Yes | Needs an admin UI, migrations and an extra runtime dependency | Overkill for 12 rules. The loader could read from a database later without other changes. |
 
-The trade-off: a genuinely new *primitive* (say, "SSN not on a deny-list held in a database") needs a small code change, a new `Check` record. That's deliberate. Most new checks are combinations, for example "nine digits and not starting with 9" is `allOf: [nineDigits, not: { matches: '9.*' }]`, and need no code. Only logic that can't be expressed that way gets compiled and tested.
+The trade-off: a genuinely new *primitive* (say, "SSN not on a deny-list held in a database") needs a small code change, a new `Check` record. That's deliberate. Most new checks are combinations, for example "an SSN not starting with 9" is `allOf: [ssnFormat, not: { matches: '9.*' }]`, and `ssnFormat` itself is `anyOf` two patterns, and need no code. Only logic that can't be expressed that way gets compiled and tested.
 
 I chose combinators over an expression language for the same reason as above: `allOf`/`anyOf`/`not` over typed primitives can be checked completely at load time (every check in a combination must work on the same type of value, and it must fit the field it's applied to), while an expression only fails when it runs.
 
-**A check or rule ships with its own tests.** A named check has value examples, for example `nineDigits` must pass `'123456789'` and fail `'123-45-6789'`, read as the type of a field it names. Every rule must have `examples`: partial applications it must pass, fail, and (optionally) not apply to, for example:
+**A check or rule ships with its own tests.** A named check has value examples, for example `ssnFormat` must pass `'123456789'` and `'123-45-6789'` and fail `'12-345-6789'`, read as the type of a field it names. Every rule must have `examples`: partial applications it must pass, fail, and (optionally) not apply to, for example:
 
 ```yaml
   examples:
@@ -126,9 +126,9 @@ For example, validating the spouse's SSN format needs no code:
 ```yaml
 - id: spouse-ssn-format
   severity: ERROR
-  message: Spouse SSN must be exactly 9 digits.
+  message: Spouse SSN must be 9 digits, either 123456789 or 123-45-6789.
   fields: [spouseInfo.ssn]
-  check: { type: nineDigits }               # the named check from checks.yml
+  check: { type: ssnFormat }                # the named check from checks.yml
   when: { field: maritalStatus, equals: married }
   examples:
     pass: [ { maritalStatus: married, spouseInfo.ssn: '987654321' }, { maritalStatus: married } ]
@@ -152,7 +152,7 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 
 ## Assumptions
 
-- **SSN**: "valid format" means exactly 9 ASCII digits with no dashes or spaces. I don't check SSA issuance rules (area 000, 666 or 900+). Those could be added as a `matches` rule without code.
+- **SSN**: "valid format" means 9 ASCII digits, either plain (`123456789`) or with dashes after the third and fifth digits (`123-45-6789`). Any other dash placement, a mix, or spaces fail, and the value is reported as sent rather than normalized. I don't check SSA issuance rules (area 000, 666 or 900+). Those could be added as a `matches` rule without code.
 - **Age** is whole years on today's date in the server's time zone, so a student turns 14 on their birthday. "Today" comes from an injected `Clock`, so tests are pinned to a fixed date.
 - **State codes**: the 50 states, DC, and the territories FAFSA accepts (AS, FM, GU, MH, MP, PR, PW, VI). Codes must be uppercase, and `ca` is rejected rather than silently corrected, because the edit's job is to report bad data.
 - **Married household**: a married student's household must be at least 2 (student and spouse).
@@ -161,7 +161,7 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 - **Parent income of 0 is valid**: the rule checks that it was reported, not that it's positive.
 - **Income** is `BigDecimal`, because it's money. Cents are allowed.
 - **Choice values** are case-insensitive (`dependent` and `DEPENDENT`). Fields not in `fields.yml` are ignored in a request, but unknown properties in the **configuration files** are rejected, because there a typo would silently change a rule.
-- **Integers must be whole numbers in JSON** (`4`, not `"4"` or `4.5`), and text fields accept JSON numbers as text, so an SSN sent as `123456789` is still checked as nine digits.
+- **Integers must be whole numbers in JSON** (`4`, not `"4"` or `4.5`), and text fields accept JSON numbers as text, so an SSN sent as `123456789` is still checked as an SSN.
 
 ## Production touches
 
@@ -173,11 +173,11 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 
 ## Testing strategy
 
-There are two layers. The **code** is covered by 163 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **configuration** is covered by 78 examples that live next to it: 59 in `rules.yml` and 19 in `checks.yml`. None of the Java tests is specific to one rule, check or FAFSA field, so changing the configuration never needs a Java change.
+There are two layers. The **code** is covered by 163 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **configuration** is covered by 86 examples that live next to it: 60 in `rules.yml` and 26 in `checks.yml`. None of the Java tests is specific to one rule, check or FAFSA field, so changing the configuration never needs a Java change.
 
 | What | Test class | Approach |
 |---|---|---|
-| Every shipped check and rule | `ShippedConfigTest` + the examples in `checks.yml` and `rules.yml` | Loads the real folder as production does, which runs all 78 examples: the 14th birthday versus one day later, 8/9/10-digit SSNs with dashes, letters and spaces, income 0 versus -0.01, college = household, a married household of 1 versus 2, and so on. Also asserts priority order and severities. |
+| Every shipped check and rule | `ShippedConfigTest` + the examples in `checks.yml` and `rules.yml` | Loads the real folder as production does, which runs all 86 examples: the 14th birthday versus one day later, 8/9/10-digit SSNs, correctly and wrongly placed dashes, letters and spaces, income 0 versus -0.01, college = household, a married household of 1 versus 2, and so on. Also asserts priority order and severities. |
 | Checks | `CheckTest` | Each built-in, with boundaries; `allOf`/`anyOf`/`not`; type consistency; named-check resolution |
 | Reading requests | `SchemaTest` | Each field type: what it accepts, what's a 400 and its wording, nested paths, every problem reported at once |
 | Rule semantics | `RuleDefinitionTest` | `required` versus missing or blank values, multiple fields, `when` conditions |

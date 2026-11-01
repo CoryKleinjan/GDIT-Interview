@@ -65,16 +65,17 @@ rules:
 
   - id: ssn-format
     severity: ERROR
-    message: SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.
+    message: SSN must be 9 digits, either 123456789 or 123-45-6789.
     fields: [studentInfo.ssn]
     required: true
-    check: { type: nineDigits }
+    check: { type: ssnFormat }
     examples:
-      pass: [ { studentInfo.ssn: '123456789' }, { studentInfo.ssn: '000000001' } ]
+      pass: [ { studentInfo.ssn: '123456789' }, { studentInfo.ssn: '123-45-6789' } ]
       fail:
         - { studentInfo.ssn: '12345678' }
         - { studentInfo.ssn: '1234567890' }
-        - { studentInfo.ssn: '123-45-6789' }
+        - { studentInfo.ssn: '12-345-6789' }
+        - { studentInfo.ssn: '123-456789' }
         - { studentInfo.ssn: '12345678a' }
         - { studentInfo.ssn: ' 123456789' }
         - { studentInfo.ssn: '' }

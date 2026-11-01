@@ -1,4 +1,4 @@
-# Named checks. A rule uses one exactly like a built-in check: check: { type: nineDigits }.
+# Named checks. A rule uses one exactly like a built-in check: check: { type: ssnFormat }.
 #
 # Built in:  matches {regex} | oneOf {values} | min {value} | atMost {field} | minAge {years} | maxAge {years}
 # Combine:   allOf {checks: [...]} | anyOf {checks: [...]} | not {check: ...}
@@ -11,13 +11,18 @@
 examplesAsOf: 2026-11-01
 
 checks:
-  - name: nineDigits
-    description: Exactly nine digits, with no dashes or spaces.
-    check: { type: matches, regex: '\d{9}' }
+  - name: ssnFormat
+    description: Nine digits, either plain (123456789) or with dashes after the third and fifth digits (123-45-6789).
+    check:
+      type: anyOf
+      checks:
+        - { type: matches, regex: '\d{9}' }
+        - { type: matches, regex: '\d{3}-\d{2}-\d{4}' }
     examples:
       field: studentInfo.ssn
-      pass: ['123456789', '000000001']
-      fail: ['12345678', '1234567890', '123-45-6789', '12345678a', ' 123456789', '']
+      pass: ['123456789', '000000001', '123-45-6789']
+      fail: ['12345678', '1234567890', '12345678a', ' 123456789', '',
+             '12-345-6789', '1234-56-789', '123-456789', '12345-6789', '123--45-6789', '123 45 6789', '123-45-678']
 
   - name: nonNegative
     description: Zero or more.
