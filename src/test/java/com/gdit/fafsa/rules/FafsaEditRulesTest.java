@@ -58,4 +58,23 @@ class FafsaEditRulesTest {
             assertThat(passes(rule, aValidApplication().dateOfBirth(null))).isFalse();
         }
     }
+
+    @Nested
+    class SsnFormat {
+
+        private final EditRule rule = rules.ssnFormat();
+
+        @ParameterizedTest
+        @ValueSource(strings = {"123456789", "987654321"})
+        void passesForExactlyNineDigits(String ssn) {
+            assertThat(passes(rule, aValidApplication().ssn(ssn))).isTrue();
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"12345678", "1234567890", "123-45-6789", "12345678a", " 123456789", "invalid"})
+        void failsForAnythingElse(String ssn) {
+            assertThat(passes(rule, aValidApplication().ssn(ssn))).isFalse();
+        }
+    }
 }
