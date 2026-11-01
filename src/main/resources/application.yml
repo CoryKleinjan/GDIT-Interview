@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: fafsa-edit-processor
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
+    default-property-inclusion: non_null
