@@ -3,9 +3,10 @@
 A Spring Boot service that applies FAFSA "edit" rules to an application and reports, rule by rule, what passed, what failed, why, and how to fix it.
 
 - Rules live in a YAML file, **not in code**. You can add, change or remove a rule by editing the file, with no rebuild, redeploy or restart.
+- Each rule carries its own **examples** (applications it must pass, fail, or not apply to). They're checked every time the file loads, so a rule that doesn't behave as described never goes live.
 - The shipped rule set has the 7 required edits plus 4 more: marital and dependency status, a married student's household size, and a warning-level age plausibility check.
 - Java 21, Spring Boot 3.5, Maven (wrapper included).
-- 155 tests, **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
+- 98 JUnit tests plus 55 rule examples, **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
 
 Design reasoning is in [DECISIONS.md](DECISIONS.md).
 
@@ -34,12 +35,13 @@ java -jar target/fafsa-edit-processor-0.1.0.jar --fafsa.edits.rules-location=fil
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | POST | `/api/v1/applications/validate` | one application | `ValidationResult` |
-| POST | `/api/v1/applications/validate/batch` | `{"applications": [ ... ]}` (1 to 1000) | `{"results": [ ... ]}` in request order |
+| POST | `/api/v1/applications/validate/batch` | `{"applications": [ ... ]}` (1 to 1000) | `{"results": [ ... ]}` in request order, validated in parallel |
 | GET | `/api/v1/rules` | | the rules that are live right now, in priority order |
 | GET | `/actuator/health` | | service health |
 | GET | `/actuator/metrics/fafsa.applications.validated` | | validations by `status` |
 | GET | `/actuator/metrics/fafsa.edits.failed` | | failures by `rule` and `severity` |
 | GET | `/actuator/metrics/fafsa.rules.reloads` | | rule file reloads by `result` (`success` or `rejected`) |
+| GET | `/actuator/metrics/executor.active?tag=name:fafsa.batch` | | batch thread pool usage (also `executor.queued`, `executor.pool.size`) |
 
 An application that fails edits still returns **200**, because the edit results are the answer. **400** is only for requests that can't be read at all: malformed JSON, wrong value types (`"numberInHousehold": "four"`), unknown enum values, or an empty or oversized batch. Enum values are case-insensitive (`"dependent"` and `"DEPENDENT"` both work).
 
@@ -169,7 +171,13 @@ The rules are in [`src/main/resources/rules.yml`](src/main/resources/rules.yml).
   check: { type: min, value: 2 }               # optional test for present values
   when: { field: maritalStatus, equals: married }   # optional; otherwise the rule always applies
   # enabled: false                             # optional switch, default true
+  examples:                                    # the rule's tests: { field: value } partial applications
+    pass: [ { maritalStatus: married, household.numberInHousehold: 2 } ]
+    fail: [ { maritalStatus: married, household.numberInHousehold: 1 }, { maritalStatus: married } ]
+    notApplicable: [ { maritalStatus: single, household.numberInHousehold: 1 } ]
 ```
+
+**Examples are required.** Every rule needs at least one `pass` and one `fail` example (`notApplicable` is optional). Each example is a partial application: fields you leave out are empty. The loader evaluates every example as if today were the file's `examplesAsOf` date, so age examples never go stale. If any rule has no examples, or a rule's result differs from its examples, the whole file is rejected. Adding a rule therefore needs only its YAML entry, tests included.
 
 Available checks:
 
@@ -188,7 +196,7 @@ Fields a rule can reference: `studentInfo.firstName`, `studentInfo.lastName`, `s
 
 1. Set `fafsa.edits.rules-location` to a file outside the jar, for example `file:/etc/fafsa/rules.yml` (or the environment variable `FAFSA_EDITS_RULES_LOCATION`).
 2. Edit that file. It's checked every `fafsa.edits.reload-interval` (default 10s).
-3. If the whole file is valid, the new rules go live and `GET /api/v1/rules` shows them. If anything is wrong (a YAML error, a typo in a property name, an unknown field or check type, a check on the wrong type of field, or a duplicate id), the file is **rejected as a whole**. The current rules stay live, and the problems are logged and counted in `fafsa.rules.reloads{result=rejected}`.
+3. If the whole file is valid, the new rules go live and `GET /api/v1/rules` shows them. If anything is wrong (a YAML error, a typo in a property name, an unknown field or check type, a check on the wrong type of field, a duplicate id, or a rule that fails its own examples), the file is **rejected as a whole**. The current rules stay live, and the problems are logged and counted in `fafsa.rules.reloads{result=rejected}`.
 
 At startup, an invalid rule file stops the service, so it can never start with no rules or partial rules.
 
@@ -200,10 +208,12 @@ Only a genuinely new *kind* of check, or a new field in the application, needs c
 src/main/java/com/gdit/fafsa/
   model/   FafsaApplication: request records (null sections become empty)
   engine/  EditRule, EditEngine, results, severity (generic, nothing FAFSA-specific)
-  rules/   rule file format (RuleDefinition, Check, Condition), Fields registry, RuleLoader, RuleFileWatcher
-  api/     controllers, batch request/response, 400 handling
+  rules/   rule file format (RuleDefinition, Check, Condition, Examples), Fields registry, RuleLoader, RuleFileWatcher
+  api/     controllers, batch thread pool, batch request/response, 400 handling
 src/main/resources/rules.yml   the shipped rule set
 src/test/java/...              tests mirror the packages; ApplicationBuilder makes test data
 ```
+
+Batch validation runs on a dedicated thread pool sized by `fafsa.edits.batch-threads` (default `0`, meaning one thread per processor).
 
 Logs are structured JSON (Elastic Common Schema). Each validation logs its status and the ids of failed rules, and never names, SSNs or other submitted values.

@@ -2,7 +2,7 @@
 
 ## Goals I optimized for
 
-1. **Correct and consistent.** Every enabled rule runs on every application, a broken rule file can never go live, and the build enforces 100% line and branch coverage.
+1. **Correct and consistent.** Every enabled rule runs on every application. A broken rule file, or a rule that doesn't behave as its own examples say, can never go live. The build enforces 100% line and branch coverage.
 2. **Rules change without a deployment.** "Rules may be added or modified during the year" is the constraint that shaped the design most.
 3. **Reusable, readable, concise.** A small vocabulary of checks is reused by every rule, and records replace boilerplate.
 
@@ -26,7 +26,7 @@ Rules are data, in [`rules.yml`](src/main/resources/rules.yml):
   when: { field: maritalStatus, equals: married }
 ```
 
-Each rule has the same small shape: which **fields**, whether they're **required**, an optional **check** for present values, and an optional **when** condition. Six check types (`matches`, `oneOf`, `min`, `atMost`, `minAge`, `maxAge`) cover all 11 shipped rules. Each check is a short Java record in `Check.java`, so the vocabulary is type-safe and unit tested, while the rules themselves are configuration.
+Each rule has the same small shape: which **fields**, whether they're **required**, an optional **check** for present values, an optional **when** condition, and its **examples**. Six check types (`matches`, `oneOf`, `min`, `atMost`, `minAge`, `maxAge`) cover all 11 shipped rules. Each check is a short Java record in `Check.java`, so the vocabulary is type-safe and unit tested, while the rules themselves are configuration.
 
 **Why this over the alternatives:**
 
@@ -39,13 +39,24 @@ Each rule has the same small shape: which **fields**, whether they're **required
 
 The trade-off: a genuinely new *kind* of check (say, "SSN not on a deny-list") needs a small code change, a new `Check` record. That's deliberate. New logic gets compiled and tested, while new *rules* built from existing logic don't.
 
+**A rule ships with its own tests.** Every rule must have `examples`: partial applications it must pass, fail, and (optionally) not apply to, for example:
+
+```yaml
+  examples:
+    pass: [ { maritalStatus: married, household.numberInHousehold: 2 } ]
+    fail: [ { maritalStatus: married, household.numberInHousehold: 1 }, { maritalStatus: married } ]
+    notApplicable: [ { maritalStatus: single, household.numberInHousehold: 1 } ]
+```
+
+The loader runs every example whenever the file is loaded, at startup and on every hot reload. A rule with no examples, or whose results differ from them, gets the whole file rejected. This is what makes "add a rule with only a YAML entry" safe: the entry contains its own tests, and they run even when the rule changes without a deployment and no CI pipeline is involved. A file-level `examplesAsOf` date pins "today" for examples, so `2012-11-01 is exactly 14` stays true forever. I checked it by mutation: changing `student-age` to 13 years makes the shipped file fail to load with `example fail[0] {studentInfo.dateOfBirth=2012-11-02} should be FAILED but was PASSED`.
+
 **Field access** goes through an explicit registry (`Fields.java`), a map from JSON path to type and getter, rather than reflection. It's type-safe, lists exactly what rules can reference, and lets the loader reject `minAge` on a text field before the file goes live.
 
 ### Changing rules at runtime
 
 `fafsa.edits.rules-location` points at the rule file. In production this would be an external file, for example a mounted ConfigMap or a file on a shared volume. `RuleFileWatcher` checks the file's timestamp every 10 seconds:
 
-- **Whole-file validation.** A changed file goes live only if every rule in it is valid. Otherwise the current rules stay, the problems are logged together, and `fafsa.rules.reloads{result=rejected}` is incremented. Partial rule sets never go live.
+- **Whole-file validation.** A changed file goes live only if every rule in it is valid and passes its examples. Otherwise the current rules stay, the problems are logged together, and `fafsa.rules.reloads{result=rejected}` is incremented. Partial rule sets never go live.
 - **Fail fast at startup.** An invalid file at startup stops the service, so it never runs with no rules.
 - **Atomic swap.** The engine holds an immutable list in a `volatile` field, so a reload swaps it in one write. A validation that's already running finishes with the rule set it started with, and no application is ever checked against half of each set.
 - **No restart needed.** I chose timestamp polling over a `WatchService` because it works the same on network mounts and ConfigMap symlink swaps, where file-system events are unreliable.
@@ -86,7 +97,7 @@ Two rules can fail together, but they can't contradict each other, because each 
 ### Performance
 
 - **Concurrent by design.** Rules are stateless predicates over an immutable record, and the rule list is immutable. So the engine is safe to call from many threads at once with no locking: every HTTP request is validated on its own Tomcat thread, and reloads never block validations.
-- **The batch endpoint** validates applications in parallel across CPU cores and keeps results in request order. Batches are capped at 1000 to bound memory and request time.
+- **The batch endpoint** validates applications in parallel on a **dedicated thread pool** and keeps results in request order. It doesn't use `parallelStream()`, because that runs on the JVM-wide common pool, where one large batch could starve unrelated parallel work. The pool is sized by `fafsa.edits.batch-threads` (default: one thread per processor, since the work is CPU-bound). Its threads are named `fafsa-batch-N`, and its size, activity and queue length are published as `executor.*` metrics. Batches are capped at 1000 to bound memory and request time.
 - **Cheap per application.** About 11 predicate calls with no I/O. Regexes are compiled once, when the file is loaded, and field lookups are direct getters with no reflection.
 - **What I deliberately didn't parallelize:** the rules within one application. Eleven microsecond-scale checks cost less than handing work between threads, so parallelism pays off across applications, not across rules. Virtual threads wouldn't help either, because the work is CPU-bound.
 - **At FAFSA scale** (millions of applications, with a peak around October 1), I'd put the engine behind a queue (Kafka or SQS) and scale consumers horizontally, rather than grow the HTTP batch. The engine has no HTTP dependency, so it would be reused unchanged.
@@ -95,7 +106,7 @@ Two rules can fail together, but they can't contradict each other, because each 
 
 | Change | What it takes |
 |---|---|
-| Add, remove, reorder or disable a rule; change a message, severity or threshold | Edit `rules.yml`. It's live within 10 seconds, with no deployment. |
+| Add, remove, reorder or disable a rule; change a message, severity or threshold | Edit `rules.yml`, including the rule's examples. It's live within 10 seconds, with no deployment and no Java. |
 | A new kind of check | One record in `Check.java`, plus a test |
 | A new application field | The model record, plus one line in `Fields.java` |
 
@@ -108,6 +119,10 @@ For example, validating the spouse's SSN format needs no code:
   fields: [spouseInfo.ssn]
   check: { type: matches, regex: '\d{9}' }
   when: { field: maritalStatus, equals: married }
+  examples:
+    pass: [ { maritalStatus: married, spouseInfo.ssn: '987654321' }, { maritalStatus: married } ]
+    fail: [ { maritalStatus: married, spouseInfo.ssn: '98765-4321' } ]
+    notApplicable: [ { maritalStatus: single } ]
 ```
 
 The `engine` package knows nothing about FAFSA or YAML, so it would also work for another form.
@@ -143,21 +158,22 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 
 ## Testing strategy
 
-155 tests, with 100% line and branch coverage enforced by JaCoCo in `mvn verify`. Only the `main()` launcher is excluded.
+There are two layers. The **code** is covered by 98 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **rules** are covered by 55 examples that live next to them in `rules.yml`. None of the Java tests is specific to one rule, so adding a rule never needs a Java change.
 
-| Layer | Test class | Approach |
+| What | Test class | Approach |
 |---|---|---|
-| Shipped rules | `ShippedRulesTest` | Loads the real `rules.yml` as production does, with a fixed clock. One `@Nested` class per rule covers its boundaries: the 14th birthday versus one day before, 8/9/10-digit SSNs, income 0 versus -0.01, college = household, a married household of 1 versus 2. It also asserts priority order. |
-| Check vocabulary | `CheckTest`, `FieldsTest` | Each check type and every registered field |
+| Every shipped rule | `ShippedRulesTest` + the examples in `rules.yml` | Loads the real file as production does, which runs all 55 examples: the 14th birthday versus one day later, 8/9/10-digit SSNs with dashes, letters and spaces, income 0 versus -0.01, college = household, a married household of 1 versus 2, and so on. Also asserts priority order and severities. |
+| Check vocabulary | `CheckTest`, `FieldsTest` | Each check type, with boundaries, and every registered field |
 | Rule semantics | `RuleDefinitionTest` | `required` versus missing or blank values, multiple fields, `when` conditions |
-| Rule file safety | `RuleLoaderTest` | Each way a file can be wrong is rejected with a clear problem, and all problems are reported at once |
+| Rule file safety | `RuleLoaderTest` | Each way a file can be wrong is rejected with a clear problem, including rules that contradict their examples. All problems are reported at once. |
 | Hot reload | `RuleFileWatcherTest` | Uses a real temp file to test pickup of changes, rejection of a bad file (old rules kept and reported once), a missing file, and startup failure |
 | Engine | `EditEngineTest` | Uses fake rules, so it tests the engine and not FAFSA: collecting all results, order, `NOT_APPLICABLE`, severity roll-up, rule swapping and metrics |
-| API | `ValidationApiTest` | Full Spring context with MockMvc. The spec's sample payloads assert exactly the seven expected failures. Also covers batch order and limits, every 400 path, the live rules endpoint and metrics. |
+| Batch pool | `BatchConfigurationTest` | Pool sizing, thread names and metrics |
+| API | `ValidationApiTest` | Full Spring context with MockMvc. The spec's sample payloads assert exactly the seven expected failures. Also covers a 200-application batch keeping its order across threads, batch limits, every 400 path, the live rules endpoint and metrics. |
 
 `ApplicationBuilder` (test only) starts from the spec's valid sample, so each test states only the field it's about.
 
-The git history shows the TDD loop: each `test: ... (red)` commit adds failing tests (usually not compiling yet), and the following `feat:` commit makes them pass with `mvn verify` green. It also shows the design changing after review: rules started as Java code, then moved to the rule file once "changeable without a deployment" became a requirement.
+The git history shows the TDD loop: each `test: ... (red)` commit adds failing tests (usually not compiling yet), and the following `feat:` commit makes them pass with `mvn verify` green. It also shows the design changing after review: rules moved from Java code to a hot-reloaded file, then per-rule Java tests moved into examples in that file.
 
 ## What I'd do next
 
@@ -172,7 +188,7 @@ The git history shows the TDD loop: each `test: ... (red)` commit adds failing t
 
 - Planning with AI (stack, design, testing approach): ~10 minutes
 - First implementation (rules in code), tests and docs with Claude Code: ~35 minutes
-- Design review and rework (rules in a hot-reloaded file, priority order, new household rule): ~25 minutes
+- Design review and rework (rules in a hot-reloaded file, priority order, new household rule, self-testing rule examples, batch pool): ~40 minutes
 - **TODO (Cory):** my own review and walkthrough time, total
 
-I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment, priority order with marital status before household, always running every rule, and the married-household rule. Claude drafted the code and tests test first, and I reviewed the design and results.
+I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment and added with only a YAML entry, priority order with marital status before household, always running every rule, the married-household rule, and a dedicated batch pool. Claude drafted the code and tests test first, and I reviewed the design and results.
