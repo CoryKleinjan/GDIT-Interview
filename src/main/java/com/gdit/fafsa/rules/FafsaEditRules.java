@@ -61,4 +61,16 @@ public class FafsaEditRules {
                         && isNonNegative(application.income().parentIncome()),
                 "income.studentIncome", "income.parentIncome");
     }
+
+    @Bean
+    public EditRule householdCollegeCount() {
+        return EditRule.of("household-college-count",
+                application -> {
+                    var household = application.household();
+                    return household.numberInHousehold() != null
+                            && household.numberInCollege() != null
+                            && household.numberInCollege() <= household.numberInHousehold();
+                },
+                "household.numberInCollege", "household.numberInHousehold");
+    }
 }

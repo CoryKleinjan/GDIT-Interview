@@ -24,3 +24,6 @@ fafsa:
       non-negative-income:
         severity: ERROR
         message: Income cannot be negative. Enter 0 for no income or a loss.
+      household-college-count:
+        severity: ERROR
+        message: Number in household and number in college are required, and number in college cannot exceed number in household.
