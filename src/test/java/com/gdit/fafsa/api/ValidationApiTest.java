@@ -66,6 +66,23 @@ class ValidationApiTest {
     }
 
     @Test
+    void largeBatchKeepsRequestOrderAcrossThreads() throws Exception {
+        String valid = sample("valid-application.json");
+        String invalid = sample("invalid-application.json");
+        var applications = new java.util.ArrayList<String>();
+        for (int i = 0; i < 200; i++) {
+            applications.add(i % 3 == 0 ? invalid : valid);
+        }
+
+        var response = post(VALIDATE_BATCH, "{\"applications\": [" + String.join(",", applications) + "]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.results", hasSize(200)));
+        for (int i = 0; i < 200; i += 37) {
+            response.andExpect(jsonPath("$.results[" + i + "].status").value(i % 3 == 0 ? "INVALID" : "VALID"));
+        }
+    }
+
+    @Test
     void emptyBatchIsRejected() throws Exception {
         post(VALIDATE_BATCH, "{\"applications\": []}")
                 .andExpect(status().isBadRequest())
