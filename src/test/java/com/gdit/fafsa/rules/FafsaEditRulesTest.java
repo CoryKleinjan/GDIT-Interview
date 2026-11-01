@@ -122,4 +122,22 @@ class FafsaEditRulesTest {
             assertThat(passes(rule, aValidApplication().income(studentIncome, parentIncome))).isFalse();
         }
     }
+
+    @Nested
+    class HouseholdCollegeCount {
+
+        private final EditRule rule = rules.householdCollegeCount();
+
+        @ParameterizedTest(name = "household={0}, college={1}")
+        @CsvSource({"4, 1", "2, 2", "1, 0"})
+        void passesWhenCollegeCountFitsInHousehold(Integer household, Integer college) {
+            assertThat(passes(rule, aValidApplication().household(household, college))).isTrue();
+        }
+
+        @ParameterizedTest(name = "household={0}, college={1}")
+        @CsvSource({"2, 5", "2, 3", ", 1", "4,", ","})
+        void failsWhenCollegeExceedsHouseholdOrACountIsMissing(Integer household, Integer college) {
+            assertThat(passes(rule, aValidApplication().household(household, college))).isFalse();
+        }
+    }
 }
