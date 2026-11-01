@@ -98,4 +98,16 @@ public class FafsaEditRules {
                         "spouseInfo.firstName", "spouseInfo.lastName", "spouseInfo.ssn")
                 .onlyWhen(FafsaApplication::isMarried);
     }
+
+    private static final int MAXIMUM_PLAUSIBLE_AGE = 120;
+
+    /** Not one of the seven required edits: a WARNING-level sanity check that shows non-blocking severities. */
+    @Bean
+    public EditRule studentAgePlausible(Clock clock) {
+        return EditRule.of("student-age-plausible",
+                        application -> ageInYears(application.studentInfo().dateOfBirth(), clock)
+                                <= MAXIMUM_PLAUSIBLE_AGE,
+                        "studentInfo.dateOfBirth")
+                .onlyWhen(application -> application.studentInfo().dateOfBirth() != null);
+    }
 }

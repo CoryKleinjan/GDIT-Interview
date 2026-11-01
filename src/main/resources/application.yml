@@ -33,3 +33,6 @@ fafsa:
       married-spouse-info:
         severity: ERROR
         message: Spouse first name, last name and SSN are required when marital status is married.
+      student-age-plausible:
+        severity: WARNING
+        message: Student would be older than 120. Confirm the date of birth.
