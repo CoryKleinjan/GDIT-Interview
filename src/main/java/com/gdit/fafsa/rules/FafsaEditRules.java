@@ -45,4 +45,12 @@ public class FafsaEditRules {
                 application -> matches(application.studentInfo().ssn(), NINE_DIGITS),
                 "studentInfo.ssn");
     }
+
+    @Bean
+    public EditRule dependentParentIncome() {
+        return EditRule.of("dependent-parent-income",
+                        application -> application.income().parentIncome() != null,
+                        "income.parentIncome")
+                .onlyWhen(FafsaApplication::isDependent);
+    }
 }
