@@ -17,4 +17,9 @@ final class Checks {
     static int ageInYears(LocalDate dateOfBirth, Clock clock) {
         return Period.between(dateOfBirth, LocalDate.now(clock)).getYears();
     }
+
+    /** False for null, so a missing value fails a format check. */
+    static boolean matches(String value, Pattern pattern) {
+        return value != null && pattern.matcher(value).matches();
+    }
 }

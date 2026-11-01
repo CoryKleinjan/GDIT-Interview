@@ -36,4 +36,13 @@ public class FafsaEditRules {
                 },
                 "studentInfo.dateOfBirth");
     }
+
+    private static final Pattern NINE_DIGITS = Pattern.compile("\\d{9}");
+
+    @Bean
+    public EditRule ssnFormat() {
+        return EditRule.of("ssn-format",
+                application -> matches(application.studentInfo().ssn(), NINE_DIGITS),
+                "studentInfo.ssn");
+    }
 }

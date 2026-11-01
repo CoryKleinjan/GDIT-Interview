@@ -15,3 +15,6 @@ fafsa:
       student-age:
         severity: ERROR
         message: Student must be at least 14 years old. Check that the date of birth is correct (YYYY-MM-DD).
+      ssn-format:
+        severity: ERROR
+        message: SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.
