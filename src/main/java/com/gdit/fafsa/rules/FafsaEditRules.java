@@ -87,4 +87,15 @@ public class FafsaEditRules {
                 application -> isOneOf(application.stateOfResidence(), STATE_CODES),
                 "stateOfResidence");
     }
+
+    @Bean
+    public EditRule marriedSpouseInfo() {
+        return EditRule.of("married-spouse-info",
+                        application -> {
+                            var spouse = application.spouseInfo();
+                            return allHaveText(spouse.firstName(), spouse.lastName(), spouse.ssn());
+                        },
+                        "spouseInfo.firstName", "spouseInfo.lastName", "spouseInfo.ssn")
+                .onlyWhen(FafsaApplication::isMarried);
+    }
 }

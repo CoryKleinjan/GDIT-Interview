@@ -30,3 +30,6 @@ fafsa:
       state-code:
         severity: ERROR
         message: State of residence must be a two-letter uppercase US state, DC or territory code, for example CA.
+      married-spouse-info:
+        severity: ERROR
+        message: Spouse first name, last name and SSN are required when marital status is married.

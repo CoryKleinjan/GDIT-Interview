@@ -31,4 +31,8 @@ final class Checks {
     static boolean isOneOf(String value, Set<String> allowed) {
         return value != null && allowed.contains(value);
     }
+
+    static boolean allHaveText(String... values) {
+        return Arrays.stream(values).allMatch(value -> value != null && !value.isBlank());
+    }
 }
