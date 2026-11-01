@@ -27,4 +27,8 @@ final class Checks {
     static boolean isNonNegative(BigDecimal amount) {
         return amount == null || amount.signum() >= 0;
     }
+
+    static boolean isOneOf(String value, Set<String> allowed) {
+        return value != null && allowed.contains(value);
+    }
 }

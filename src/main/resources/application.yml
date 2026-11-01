@@ -27,3 +27,6 @@ fafsa:
       household-college-count:
         severity: ERROR
         message: Number in household and number in college are required, and number in college cannot exceed number in household.
+      state-code:
+        severity: ERROR
+        message: State of residence must be a two-letter uppercase US state, DC or territory code, for example CA.
