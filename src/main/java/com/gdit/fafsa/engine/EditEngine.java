@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Applies every enabled edit rule to an application and collects all results (it never stops at the first
- * failure). Rules are stateless, so one engine can validate many applications concurrently.
+ * failure), in the order the rules are registered. Rules are stateless, so one engine can validate many applications concurrently.
  */
 @Service
 public class EditEngine {
@@ -29,9 +29,10 @@ public class EditEngine {
             throw new IllegalStateException("Every edit rule needs exactly one entry under fafsa.edits.rules. "
                     + "Rules in code: " + rulesById.keySet() + ", configured: " + properties.rules().keySet());
         }
-        this.rules = properties.rules().entrySet().stream()
-                .filter(entry -> entry.getValue().enabled())
-                .map(entry -> new ConfiguredRule(rulesById.get(entry.getKey()), entry.getValue()))
+        // Results follow rule registration order, so overriding a setting at deploy time never reorders them.
+        this.rules = rules.stream()
+                .map(rule -> new ConfiguredRule(rule, properties.rules().get(rule.id())))
+                .filter(rule -> rule.settings().enabled())
                 .toList();
         this.meters = meters;
     }

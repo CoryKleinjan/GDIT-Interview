@@ -12,7 +12,8 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * The FAFSA edit rules, one bean per rule. Each bean holds only the rule's logic; its severity, message and
- * on/off switch live under {@code fafsa.edits.rules.<id>} in {@code application.yml}.
+ * on/off switch live under {@code fafsa.edits.rules.<id>} in {@code application.yml}. Declaration order is the
+ * order results are reported in.
  *
  * <p>To add a rule: add a bean here, an entry in {@code application.yml}, and a test in FafsaEditRulesTest.
  */

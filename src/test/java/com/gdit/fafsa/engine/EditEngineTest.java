@@ -31,9 +31,9 @@ class EditEngineTest {
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
 
     @Test
-    void appliesEveryRuleInConfiguredOrderAndCollectsAllResults() {
-        var engine = engine(List.of(PASSING, FAILING, SKIPPED),
-                settings("skipped", ERROR, "failing", ERROR, "passing", ERROR));
+    void appliesEveryRuleInRegistrationOrderAndCollectsAllResults() {
+        var engine = engine(List.of(SKIPPED, FAILING, PASSING),
+                settings("passing", ERROR, "failing", ERROR, "skipped", ERROR));
 
         assertThat(engine.validate(APPLICATION).results())
                 .extracting(RuleResult::ruleId, RuleResult::outcome)

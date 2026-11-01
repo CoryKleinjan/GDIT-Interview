@@ -20,7 +20,7 @@ management:
 
 fafsa:
   edits:
-    # One entry per rule id, in the order rules are applied and reported.
+    # One entry per rule id (rules are reported in the order they are declared in FafsaEditRules).
     # severity: ERROR (makes the application INVALID) | WARNING (VALID_WITH_WARNINGS) | INFO (no effect on status)
     # enabled: defaults to true. Messages say what is wrong and how to fix it.
     rules:
