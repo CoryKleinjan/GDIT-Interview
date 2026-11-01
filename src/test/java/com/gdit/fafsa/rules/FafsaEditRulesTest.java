@@ -140,4 +140,23 @@ class FafsaEditRulesTest {
             assertThat(passes(rule, aValidApplication().household(household, college))).isFalse();
         }
     }
+
+    @Nested
+    class StateCode {
+
+        private final EditRule rule = rules.stateCode();
+
+        @ParameterizedTest
+        @ValueSource(strings = {"CA", "NY", "WY", "DC", "PR", "GU"})
+        void passesForUsStatesDcAndTerritories(String state) {
+            assertThat(passes(rule, aValidApplication().stateOfResidence(state))).isTrue();
+        }
+
+        @ParameterizedTest
+        @NullAndEmptySource
+        @ValueSource(strings = {"XX", "ca", "CAL", " CA", "California"})
+        void failsForAnythingElse(String state) {
+            assertThat(passes(rule, aValidApplication().stateOfResidence(state))).isFalse();
+        }
+    }
 }
