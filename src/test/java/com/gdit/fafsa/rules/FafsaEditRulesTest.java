@@ -77,4 +77,31 @@ class FafsaEditRulesTest {
             assertThat(passes(rule, aValidApplication().ssn(ssn))).isFalse();
         }
     }
+
+    @Nested
+    class DependentParentIncome {
+
+        private final EditRule rule = rules.dependentParentIncome();
+
+        @Test
+        void passesWhenADependentReportsParentIncome() {
+            assertThat(passes(rule, aValidApplication())).isTrue();
+        }
+
+        @Test
+        void passesWhenParentIncomeIsZero() {
+            assertThat(passes(rule, aValidApplication().income(BigDecimal.ONE, BigDecimal.ZERO))).isTrue();
+        }
+
+        @Test
+        void failsWhenADependentOmitsParentIncome() {
+            assertThat(passes(rule, aValidApplication().income(BigDecimal.ONE, null))).isFalse();
+        }
+
+        @Test
+        void appliesOnlyToDependentStudents() {
+            assertThat(applies(rule, aValidApplication())).isTrue();
+            assertThat(applies(rule, aValidApplication().independent())).isFalse();
+        }
+    }
 }
