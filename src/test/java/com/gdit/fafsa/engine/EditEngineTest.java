@@ -49,10 +49,12 @@ class EditEngineTest {
     }
 
     @Test
-    void passedAndNotApplicableResultsHaveNoMessage() {
+    void severityAndMessageAreReportedOnlyForFailures() {
         engine.replaceRules(List.of(passing("a"), notApplicable("c")));
 
-        assertThat(engine.validate(APPLICATION).results()).extracting(RuleResult::message).containsOnlyNulls();
+        assertThat(engine.validate(APPLICATION).results())
+                .containsExactly(new RuleResult("a", PASSED, null, null, List.of("a.field")),
+                        new RuleResult("c", NOT_APPLICABLE, null, null, List.of("c.field")));
     }
 
     @Test

@@ -43,6 +43,8 @@ class ValidationApiTest {
                 .andExpect(jsonPath("$.status").value("VALID"))
                 .andExpect(jsonPath("$.results", hasSize(11)))
                 .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')]").isEmpty())
+                .andExpect(jsonPath("$.results[0].severity").doesNotExist())
+                .andExpect(jsonPath("$.results[0].message").doesNotExist())
                 .andExpect(jsonPath("$.results[?(@.ruleId == 'married-spouse-info')].outcome")
                         .value(contains("NOT_APPLICABLE")));
     }
