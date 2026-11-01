@@ -6,6 +6,12 @@ spring:
       accept-case-insensitive-enums: true
     default-property-inclusion: non_null
 
+logging:
+  structured:
+    format:
+      # JSON (Elastic Common Schema) logs for log aggregation. Remove this line for plain-text logs locally.
+      console: ecs
+
 management:
   endpoints:
     web:
