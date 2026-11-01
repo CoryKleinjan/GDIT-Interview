@@ -34,6 +34,7 @@
   fieldset { border: 0; margin: 0 0 12px; padding: 0; }
   legend { font-weight: 600; margin-bottom: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  label .type { font-size: 10px; opacity: .75; }
   label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
   input, select, textarea {
     font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
@@ -76,7 +77,7 @@
 <body>
 <header>
   <h1>FAFSA Edit Tester</h1>
-  <p>Validate an application against the live rules. Edit <code>rules.yml</code> and the rules list updates after the next reload.</p>
+  <p>Validate an application against the live configuration. Edit <code>fields.yml</code>, <code>checks.yml</code> or <code>rules.yml</code> and the form and rules list update after the next reload.</p>
 </header>
 
 <main>
@@ -93,48 +94,7 @@
     </div>
 
     <form id="form" autocomplete="off">
-      <fieldset>
-        <legend>Student</legend>
-        <div class="grid">
-          <label>First name <input data-path="studentInfo.firstName"></label>
-          <label>Last name <input data-path="studentInfo.lastName"></label>
-          <label>SSN <input data-path="studentInfo.ssn" placeholder="123456789"></label>
-          <label>Date of birth <input data-path="studentInfo.dateOfBirth" placeholder="YYYY-MM-DD"></label>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Status</legend>
-        <div class="grid">
-          <label>Dependency status
-            <select data-path="dependencyStatus">
-              <option value="">(missing)</option><option>dependent</option><option>independent</option>
-            </select>
-          </label>
-          <label>Marital status
-            <select data-path="maritalStatus">
-              <option value="">(missing)</option><option>single</option><option>married</option>
-            </select>
-          </label>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Spouse</legend>
-        <div class="grid">
-          <label>First name <input data-path="spouseInfo.firstName"></label>
-          <label>Last name <input data-path="spouseInfo.lastName"></label>
-          <label>SSN <input data-path="spouseInfo.ssn"></label>
-        </div>
-      </fieldset>
-      <fieldset>
-        <legend>Household and income</legend>
-        <div class="grid">
-          <label>Number in household <input data-path="household.numberInHousehold" data-number inputmode="numeric"></label>
-          <label>Number in college <input data-path="household.numberInCollege" data-number inputmode="numeric"></label>
-          <label>Student income <input data-path="income.studentIncome" data-number inputmode="decimal"></label>
-          <label>Parent income <input data-path="income.parentIncome" data-number inputmode="decimal"></label>
-          <label>State of residence <input data-path="stateOfResidence" placeholder="CA" maxlength="10"></label>
-        </div>
-      </fieldset>
+      <p class="muted">Loading fields...</p>
     </form>
 
     <div id="json-panel" class="hidden">
@@ -182,8 +142,67 @@ const SAMPLES = {
 };
 
 const $ = (selector) => document.querySelector(selector);
-const inputs = [...document.querySelectorAll("[data-path]")];
+let inputs = [];
+let schemaVersion = "";
 let mode = "form";
+
+// The form is built from GET /api/v1/fields, so a field added to fields.yml shows up here without a deploy.
+// Fields are grouped by their first path segment; top-level fields share one group.
+const SECTION_TITLES = { "": "Application" };
+const ACRONYMS = { ssn: "SSN" };
+const words = (name) => name.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase()
+    .replace(/\b\w+\b/g, (word) => ACRONYMS[word] ?? word).replace(/^./, (c) => c.toUpperCase());
+
+function inputFor(field) {
+  if (field.type === "CHOICE") {
+    const options = field.values.map((v) => `<option>${escapeHtml(v)}</option>`).join("");
+    return `<select data-path="${escapeHtml(field.path)}"><option value="">(missing)</option>${options}</select>`;
+  }
+  const hints = {
+    INTEGER: ' data-number inputmode="numeric"', NUMBER: ' data-number inputmode="decimal"',
+    DATE: ' placeholder="YYYY-MM-DD"', TEXT: ""
+  };
+  return `<input data-path="${escapeHtml(field.path)}"${hints[field.type] ?? ""}>`;
+}
+
+function buildForm(fields) {
+  const sections = new Map();
+  for (const field of fields) {
+    const parts = field.path.split(".");
+    const section = parts.length > 1 ? parts[0] : "";
+    if (!sections.has(section)) sections.set(section, []);
+    const name = words(parts.slice(1).join(" ") || parts[0]);
+    sections.get(section).push(`<label><span>${escapeHtml(name)} <span class="type">${field.type.toLowerCase()}</span></span>
+      ${inputFor(field)}</label>`);
+  }
+  $("#form").innerHTML = [...sections].map(([section, labels]) => `
+    <fieldset><legend>${escapeHtml(SECTION_TITLES[section] ?? words(section))}</legend>
+      <div class="grid">${labels.join("")}</div></fieldset>`).join("");
+  inputs = [...document.querySelectorAll("[data-path]")];
+}
+
+async function loadFields() {
+  try {
+    const response = await fetch("api/v1/fields");
+    const fields = await response.json();
+    const version = JSON.stringify(fields);
+    if (version === schemaVersion) return;
+    const current = schemaVersion ? formToApplication() : null;
+    schemaVersion = version;
+    buildForm(fields);
+    if (current) applicationToForm(current);
+  } catch (error) {
+    $("#validate-note").textContent = `Couldn't load fields: ${error.message}`;
+  }
+}
+
+const getPath = (object, path) => path.split(".").reduce((value, key) => value?.[key], object);
+
+function setPath(object, path, value) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  keys.reduce((parent, key) => (parent[key] ??= {}), object)[last] = value;
+}
 
 // Form <-> JSON. Empty inputs are left out, which is how the API sees a missing value.
 function formToApplication() {
@@ -191,20 +210,24 @@ function formToApplication() {
   for (const input of inputs) {
     const raw = input.value.trim();
     if (raw === "") continue;
-    const value = input.hasAttribute("data-number") && !isNaN(Number(raw)) ? Number(raw) : raw;
-    const [section, field] = input.dataset.path.split(".");
-    if (field) (application[section] ??= {})[field] = value;
-    else application[section] = value;
+    setPath(application, input.dataset.path,
+        input.hasAttribute("data-number") && !isNaN(Number(raw)) ? Number(raw) : raw);
   }
   return application;
 }
 
 function applicationToForm(application) {
   for (const input of inputs) {
-    const [section, field] = input.dataset.path.split(".");
-    const value = field ? application?.[section]?.[field] : application?.[section];
-    // Selects use lowercase options; the API accepts either case.
-    input.value = value == null ? "" : input.matches("select") ? String(value).toLowerCase() : String(value);
+    const value = getPath(application, input.dataset.path);
+    const text = value == null ? "" : String(value);
+    if (input.matches("select")) {
+      // Choices match in any case, as the API does; an unknown value is kept so it can still be sent.
+      const option = [...input.options].find((o) => o.value.toLowerCase() === text.toLowerCase());
+      if (!option) input.add(new Option(text, text));
+      input.value = option ? option.value : text;
+    } else {
+      input.value = text;
+    }
   }
 }
 
@@ -295,7 +318,6 @@ async function validate() {
   }
 }
 
-// Live rules: refreshed on demand, every 10 seconds, and when the tab regains focus.
 async function loadRules() {
   try {
     const response = await fetch("api/v1/rules");
@@ -321,11 +343,13 @@ $("#clear").addEventListener("click", () => load({}));
 $("#form-tab").addEventListener("click", () => showMode("form"));
 $("#json-tab").addEventListener("click", () => showMode("json"));
 $("#validate").addEventListener("click", validate);
-$("#refresh-rules").addEventListener("click", loadRules);
-window.addEventListener("focus", loadRules);
-setInterval(loadRules, 10000);
+// Live configuration: fields and rules refresh on demand, every 10 seconds, and when the tab regains focus.
+const refresh = () => { loadFields(); loadRules(); };
+$("#refresh-rules").addEventListener("click", refresh);
+window.addEventListener("focus", refresh);
+setInterval(refresh, 10000);
 
-load(structuredClone(SAMPLES.valid));
+loadFields().then(() => load(structuredClone(SAMPLES.valid)));
 loadRules();
 </script>
 </body>
