@@ -1,11 +1,14 @@
 package com.gdit.fafsa.api;
 
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.forwardedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -154,6 +157,14 @@ class ValidationApiTest {
         post(VALIDATE, "[]")
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Request body is malformed or has the wrong shape."));
+    }
+
+    @Test
+    void servesTheManualTestingPageAtTheRoot() throws Exception {
+        mvc.perform(get("/")).andExpect(status().isOk()).andExpect(forwardedUrl("index.html"));
+        mvc.perform(get("/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("<title>FAFSA Edit Tester</title>")));
     }
 
     @Test
