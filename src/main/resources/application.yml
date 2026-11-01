@@ -25,3 +25,5 @@ fafsa:
     rules-location: classpath:rules.yml
     # How often to check the rule file for changes. A changed file goes live only if it is entirely valid.
     reload-interval: 10s
+    # Threads for batch validation. 0 = one per processor (validation is CPU-bound).
+    batch-threads: 0
