@@ -1,16 +1,17 @@
 # FAFSA edit rules.
 #
 # Rules run, and are reported, top to bottom: order is priority. Every rule always runs, so an applicant
-# sees every problem at once. This file can live outside the jar and be edited without a deployment.
+# sees every problem at once. This file, fields.yml and checks.yml can live outside the jar and be edited
+# without a deployment.
 #
 #   id         stable identifier, reported in results
 #   severity   ERROR (application INVALID) | WARNING (VALID_WITH_WARNINGS) | INFO (no effect on status)
 #   enabled    optional, default true
 #   message    shown when the rule fails: what is wrong and how to fix it
-#   fields     the fields the rule checks; every one must pass
 #   required   true: a missing (null or blank) value fails. false: a missing value passes
-#   check      optional test for present values:
-#                matches {regex} | oneOf {values} | min {value} | atMost {field} | minAge {years} | maxAge {years}
+#   fields     field paths from fields.yml; every one must pass
+#   check      optional test for present values: a built-in check, an allOf/anyOf/not combination,
+#              or a named check from checks.yml
 #   when       optional condition { field, equals }; when false the rule reports NOT_APPLICABLE
 #   examples   the rule's tests: partial applications ({ field: value }) it must pass, fail, and (optionally)
 #              not apply to. Every rule needs at least one pass and one fail example. They are checked on
@@ -54,7 +55,7 @@ rules:
     message: SSN must be exactly 9 digits with no dashes or spaces, for example 123456789.
     fields: [studentInfo.ssn]
     required: true
-    check: { type: matches, regex: '\d{9}' }
+    check: { type: nineDigits }
     examples:
       pass: [ { studentInfo.ssn: '123456789' }, { studentInfo.ssn: '000000001' } ]
       fail:
@@ -81,7 +82,7 @@ rules:
     severity: ERROR
     message: Income cannot be negative. Enter 0 for no income or a loss.
     fields: [income.studentIncome, income.parentIncome]
-    check: { type: min, value: 0 }
+    check: { type: nonNegative }
     examples:
       pass: [ { income.studentIncome: 5000, income.parentIncome: 65000 }, { income.studentIncome: 0 }, {} ]
       fail: [ { income.studentIncome: -1000 }, { income.studentIncome: 0, income.parentIncome: -0.01 } ]
@@ -131,11 +132,7 @@ rules:
     message: State of residence must be a two-letter uppercase US state, DC or territory code, for example CA.
     fields: [stateOfResidence]
     required: true
-    check:
-      type: oneOf
-      values: [AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO,
-               MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY,
-               DC, AS, FM, GU, MH, MP, PR, PW, VI]
+    check: { type: usStateOrTerritoryCode }
     examples:
       pass: [ { stateOfResidence: CA }, { stateOfResidence: DC }, { stateOfResidence: PR } ]
       fail: [ { stateOfResidence: XX }, { stateOfResidence: ca }, { stateOfResidence: CAL }, {} ]

@@ -1,4 +1,4 @@
-package com.gdit.fafsa.rules;
+package com.gdit.fafsa.config;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;

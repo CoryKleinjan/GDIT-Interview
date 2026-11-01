@@ -1,0 +1,22 @@
+# The application schema: every field a request can carry, by JSON path, and its type.
+# Rules and checks can only use fields listed here. Add a field and it can be used right away, with no deployment.
+#
+#   type: text | integer | number | date (YYYY-MM-DD) | choice (needs 'values'; matched case-insensitively)
+#
+# A request value that doesn't fit its type is a 400 naming the field. Fields not listed here are ignored.
+
+fields:
+  - { path: studentInfo.firstName,       type: text }
+  - { path: studentInfo.lastName,        type: text }
+  - { path: studentInfo.ssn,             type: text }
+  - { path: studentInfo.dateOfBirth,     type: date }
+  - { path: dependencyStatus,            type: choice, values: [dependent, independent] }
+  - { path: maritalStatus,               type: choice, values: [single, married] }
+  - { path: spouseInfo.firstName,        type: text }
+  - { path: spouseInfo.lastName,         type: text }
+  - { path: spouseInfo.ssn,              type: text }
+  - { path: household.numberInHousehold, type: integer }
+  - { path: household.numberInCollege,   type: integer }
+  - { path: income.studentIncome,        type: number }
+  - { path: income.parentIncome,         type: number }
+  - { path: stateOfResidence,            type: text }

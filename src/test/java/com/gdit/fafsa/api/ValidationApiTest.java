@@ -91,7 +91,7 @@ class ValidationApiTest {
     void emptyBatchIsRejected() throws Exception {
         post(VALIDATE_BATCH, "{\"applications\": []}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors").value(contains("applications: size must be between 1 and 1000")));
+                .andExpect(jsonPath("$.errors").value(contains("applications size must be between 1 and 1000")));
     }
 
     @Test
@@ -134,31 +134,50 @@ class ValidationApiTest {
     }
 
     @Test
-    void wrongValueTypeNamesTheField() throws Exception {
-        post(VALIDATE, "{\"household\": {\"numberInHousehold\": \"four\"}}")
+    void valuesThatDoNotFitTheirTypeAreAllNamedAtOnce() throws Exception {
+        post(VALIDATE, "{\"household\": {\"numberInHousehold\": \"four\"}, \"dependencyStatus\": \"sometimes\"}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Invalid value for field 'household.numberInHousehold'."));
-    }
-
-    @Test
-    void unknownEnumValueNamesTheField() throws Exception {
-        post(VALIDATE, "{\"dependencyStatus\": \"sometimes\"}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Invalid value for field 'dependencyStatus'."));
+                .andExpect(jsonPath("$.detail").value("Some fields have values that do not fit their type."))
+                .andExpect(jsonPath("$.errors").value(containsInAnyOrder(
+                        "household.numberInHousehold must be a whole number",
+                        "dependencyStatus must be one of [dependent, independent]")));
     }
 
     @Test
     void invalidValueInsideABatchNamesTheIndexedField() throws Exception {
         post(VALIDATE_BATCH, "{\"applications\": [{\"maritalStatus\": 42.5}]}")
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.detail").value("Invalid value for field 'applications[0].maritalStatus'."));
+                .andExpect(jsonPath("$.errors").value(contains(
+                        "applications[0].maritalStatus must be one of [single, married]")));
     }
 
     @Test
     void wrongTopLevelShapeIsRejected() throws Exception {
         post(VALIDATE, "[]")
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors").value(contains("The application must be a JSON object")));
+    }
+
+    @Test
+    void batchThatIsNotAnObjectIsRejected() throws Exception {
+        post(VALIDATE_BATCH, "[]")
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").value("Request body is malformed or has the wrong shape."));
+    }
+
+    @Test
+    void wrongBatchShapeNamesTheField() throws Exception {
+        post(VALIDATE_BATCH, "{\"applications\": \"x\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value("Invalid value for field 'applications'."));
+    }
+
+    @Test
+    void listsTheApplicationFieldsSoClientsCanBuildForms() throws Exception {
+        mvc.perform(get("/api/v1/fields"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.path == 'studentInfo.dateOfBirth')].type").value(contains("DATE")))
+                .andExpect(jsonPath("$[?(@.path == 'maritalStatus')].values[0]").value(contains("single")));
     }
 
     @Test

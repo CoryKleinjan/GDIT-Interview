@@ -1,4 +1,4 @@
-package com.gdit.fafsa.rules;
+package com.gdit.fafsa.config;
 
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;

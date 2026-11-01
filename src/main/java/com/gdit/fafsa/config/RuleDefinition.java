@@ -1,10 +1,10 @@
-package com.gdit.fafsa.rules;
+package com.gdit.fafsa.config;
 
 import static java.util.Objects.requireNonNullElse;
 
 import com.gdit.fafsa.engine.EditRule;
 import com.gdit.fafsa.engine.Severity;
-import com.gdit.fafsa.model.FafsaApplication;
+import com.gdit.fafsa.engine.Application;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotNull;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -34,11 +35,17 @@ public record RuleDefinition(
         enabled = requireNonNullElse(enabled, true);
     }
 
+    /** This rule with named checks replaced by their definitions. */
+    RuleDefinition resolve(Function<String, Check> definitions) {
+        Check resolved = check == null ? null : check.resolve(definitions);
+        return new RuleDefinition(id, severity, enabled, message, fields, required, resolved, when, examples);
+    }
+
     EditRule toEditRule(Clock clock) {
-        Predicate<FafsaApplication> appliesTo = when == null ? application -> true : when::test;
+        Predicate<Application> appliesTo = when == null ? application -> true : when::test;
         return new EditRule(id, severity, message, fields, appliesTo, application -> {
             var context = new RuleContext(application, LocalDate.now(clock));
-            return fields.stream().allMatch(field -> isValid(Fields.read(field, application), context));
+            return fields.stream().allMatch(field -> isValid(application.get(field), context));
         });
     }
 

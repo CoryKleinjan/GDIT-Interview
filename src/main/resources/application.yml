@@ -2,8 +2,6 @@ spring:
   application:
     name: fafsa-edit-processor
   jackson:
-    mapper:
-      accept-case-insensitive-enums: true
     default-property-inclusion: non_null
 
 logging:
@@ -20,10 +18,10 @@ management:
 
 fafsa:
   edits:
-    # The edit rules. Point this at a file outside the jar, e.g. file:/etc/fafsa/rules.yml,
-    # to add, change or remove rules without a deployment.
-    rules-location: classpath:rules.yml
-    # How often to check the rule file for changes. A changed file goes live only if it is entirely valid.
+    # The folder holding fields.yml, checks.yml and rules.yml. Point this at a folder outside the jar,
+    # e.g. file:/etc/fafsa/edits/, to change fields, checks and rules without a deployment.
+    config-location: classpath:edits/
+    # How often to check the files for changes. A change goes live only if all three are valid together.
     reload-interval: 10s
     # Threads for batch validation. 0 = one per processor (validation is CPU-bound).
     batch-threads: 0

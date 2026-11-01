@@ -7,96 +7,152 @@ import static com.gdit.fafsa.engine.Severity.ERROR;
 import static com.gdit.fafsa.engine.Severity.INFO;
 import static com.gdit.fafsa.engine.Severity.WARNING;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 
-import com.gdit.fafsa.model.FafsaApplication;
-import com.gdit.fafsa.model.FafsaApplication.DependencyStatus;
-import com.gdit.fafsa.model.FafsaApplication.MaritalStatus;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.Test;
 
 class EditEngineTest {
 
-    private static final FafsaApplication APPLICATION =
-            new FafsaApplication(null, DependencyStatus.INDEPENDENT, MaritalStatus.SINGLE, null, null, null, null);
+    private static final Schema SCHEMA = new Schema(List.of(new FieldDefinition("count", FieldType.INTEGER, null)));
 
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final EditEngine engine = new EditEngine(meters);
 
     @Test
-    void hasNoRulesUntilSomeAreLoaded() {
-        assertThat(engine.rules()).isEmpty();
-        assertThat(engine.validate(APPLICATION)).isEqualTo(new ValidationResult(OverallStatus.VALID, List.of()));
+    void hasNoFieldsOrRulesUntilSomeAreLoaded() {
+        assertThat(engine.ruleset()).isEqualTo(Ruleset.EMPTY);
+        assertThat(engine.validate(count(1))).isEqualTo(new ValidationResult(OverallStatus.VALID, List.of()));
     }
 
     @Test
     void appliesEveryRuleInOrderAndCollectsAllResults() {
-        engine.replaceRules(List.of(notApplicable("c"), failing("b", ERROR), passing("a")));
+        load(notApplicable("c"), failing("b", ERROR), passing("a"));
 
-        assertThat(engine.validate(APPLICATION).results())
+        assertThat(engine.validate(count(1)).results())
                 .extracting(RuleResult::ruleId, RuleResult::outcome)
                 .containsExactly(tuple("c", NOT_APPLICABLE), tuple("b", FAILED), tuple("a", PASSED));
     }
 
     @Test
-    void failedResultCarriesMessageSeverityAndFields() {
-        engine.replaceRules(List.of(failing("b", WARNING)));
+    void rulesSeeTheTypedValuesReadByTheSchema() {
+        load(rule("small", ERROR, app -> true, app -> (Long) app.get("count") < 10));
 
-        assertThat(engine.validate(APPLICATION).results())
+        assertThat(engine.validate(count(3)).status()).isEqualTo(OverallStatus.VALID);
+        assertThat(engine.validate(count(30)).status()).isEqualTo(OverallStatus.INVALID);
+    }
+
+    @Test
+    void rejectsAnApplicationThatDoesNotFitTheSchema() {
+        load(passing("a"));
+        ObjectNode bad = JsonNodeFactory.instance.objectNode().put("count", "many");
+
+        assertThatThrownBy(() -> engine.validate(bad))
+                .isInstanceOfSatisfying(InvalidApplicationException.class,
+                        ex -> assertThat(ex.problems()).containsExactly("count must be a whole number"));
+    }
+
+    @Test
+    void failedResultCarriesMessageSeverityAndFields() {
+        load(failing("b", WARNING));
+
+        assertThat(engine.validate(count(1)).results())
                 .containsExactly(new RuleResult("b", FAILED, WARNING, "b message", List.of("b.field")));
     }
 
     @Test
     void severityAndMessageAreReportedOnlyForFailures() {
-        engine.replaceRules(List.of(passing("a"), notApplicable("c")));
+        load(passing("a"), notApplicable("c"));
 
-        assertThat(engine.validate(APPLICATION).results())
+        assertThat(engine.validate(count(1)).results())
                 .containsExactly(new RuleResult("a", PASSED, null, null, List.of("a.field")),
                         new RuleResult("c", NOT_APPLICABLE, null, null, List.of("c.field")));
     }
 
     @Test
-    void replacingRulesTakesEffectOnTheNextValidation() {
-        engine.replaceRules(List.of(failing("old", ERROR)));
-        engine.replaceRules(List.of(passing("new")));
+    void replacingTheRulesetTakesEffectOnTheNextValidation() {
+        load(failing("old", ERROR));
+        load(passing("new"));
 
-        assertThat(engine.rules()).extracting(EditRule::id).containsExactly("new");
-        assertThat(engine.validate(APPLICATION).results()).extracting(RuleResult::ruleId).containsExactly("new");
+        assertThat(engine.ruleset().rules()).extracting(EditRule::id).containsExactly("new");
+        assertThat(engine.validate(count(1)).results()).extracting(RuleResult::ruleId).containsExactly("new");
     }
 
     @Test
     void anyFailedErrorMakesTheApplicationInvalid() {
-        engine.replaceRules(List.of(failing("b", ERROR), failing("w", WARNING)));
+        load(failing("b", ERROR), failing("w", WARNING));
 
-        assertThat(engine.validate(APPLICATION).status()).isEqualTo(OverallStatus.INVALID);
+        assertThat(engine.validate(count(1)).status()).isEqualTo(OverallStatus.INVALID);
     }
 
     @Test
     void failedWarningsWithoutErrorsAreValidWithWarnings() {
-        engine.replaceRules(List.of(failing("w", WARNING), passing("a")));
+        load(failing("w", WARNING), passing("a"));
 
-        assertThat(engine.validate(APPLICATION).status()).isEqualTo(OverallStatus.VALID_WITH_WARNINGS);
+        assertThat(engine.validate(count(1)).status()).isEqualTo(OverallStatus.VALID_WITH_WARNINGS);
     }
 
     @Test
     void failedInfoRulesLeaveTheApplicationValid() {
-        engine.replaceRules(List.of(failing("i", INFO), passing("a")));
+        load(failing("i", INFO), passing("a"));
 
-        assertThat(engine.validate(APPLICATION).status()).isEqualTo(OverallStatus.VALID);
+        assertThat(engine.validate(count(1)).status()).isEqualTo(OverallStatus.VALID);
+    }
+
+    @Test
+    void validatesABatchInParallelKeepingRequestOrder() {
+        load(rule("even", ERROR, app -> true, app -> (Long) app.get("count") % 2 == 0));
+        List<JsonNode> batch = new ArrayList<>();
+        for (int i = 0; i < 50; i++) {
+            batch.add(count(i));
+        }
+        var executor = Executors.newFixedThreadPool(4);
+
+        List<ValidationResult> results = engine.validateAll(batch, executor);
+
+        executor.shutdown();
+        for (int i = 0; i < 50; i++) {
+            assertThat(results.get(i).status()).isEqualTo(i % 2 == 0 ? OverallStatus.VALID : OverallStatus.INVALID);
+        }
+    }
+
+    @Test
+    void rejectsTheWholeBatchNamingEachUnreadableApplicationByIndex() {
+        load(passing("a"));
+        ObjectNode bad = JsonNodeFactory.instance.objectNode().put("count", "many");
+
+        assertThatThrownBy(() -> engine.validateAll(List.of(count(1), bad, bad), Runnable::run))
+                .isInstanceOfSatisfying(InvalidApplicationException.class, ex -> assertThat(ex.problems())
+                        .containsExactly("applications[1].count must be a whole number",
+                                "applications[2].count must be a whole number"));
     }
 
     @Test
     void countsValidationsByStatusAndFailuresByRule() {
-        engine.replaceRules(List.of(failing("b", ERROR), passing("a")));
+        load(failing("b", ERROR), passing("a"));
 
-        engine.validate(APPLICATION);
-        engine.validate(APPLICATION);
+        engine.validate(count(1));
+        engine.validate(count(1));
 
         assertThat(meters.counter("fafsa.applications.validated", "status", "INVALID").count()).isEqualTo(2);
         assertThat(meters.counter("fafsa.edits.failed", "rule", "b", "severity", "ERROR").count()).isEqualTo(2);
         assertThat(meters.find("fafsa.edits.failed").tag("rule", "a").counter()).isNull();
+    }
+
+    private void load(EditRule... rules) {
+        engine.replace(new Ruleset(SCHEMA, List.of(rules)));
+    }
+
+    private static JsonNode count(int count) {
+        return JsonNodeFactory.instance.objectNode().put("count", count);
     }
 
     private static EditRule passing(String id) {
@@ -111,8 +167,8 @@ class EditEngineTest {
         return rule(id, ERROR, app -> false, app -> false);
     }
 
-    private static EditRule rule(String id, Severity severity, Predicate<FafsaApplication> appliesTo,
-            Predicate<FafsaApplication> check) {
+    private static EditRule rule(String id, Severity severity, Predicate<Application> appliesTo,
+            Predicate<Application> check) {
         return new EditRule(id, severity, id + " message", List.of(id + ".field"), appliesTo, check);
     }
 }
