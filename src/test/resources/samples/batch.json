@@ -1,0 +1,41 @@
+{
+  "applications": [
+    {
+      "studentInfo": {
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "ssn": "123456789",
+        "dateOfBirth": "2003-05-15"
+      },
+      "dependencyStatus": "dependent",
+      "maritalStatus": "single",
+      "household": {
+        "numberInHousehold": 4,
+        "numberInCollege": 1
+      },
+      "income": {
+        "studentIncome": 5000,
+        "parentIncome": 65000
+      },
+      "stateOfResidence": "CA"
+    },
+    {
+      "studentInfo": {
+        "firstName": "John",
+        "lastName": "Doe",
+        "ssn": "invalid",
+        "dateOfBirth": "2015-01-01"
+      },
+      "dependencyStatus": "dependent",
+      "maritalStatus": "married",
+      "household": {
+        "numberInHousehold": 2,
+        "numberInCollege": 5
+      },
+      "income": {
+        "studentIncome": -1000
+      },
+      "stateOfResidence": "XX"
+    }
+  ]
+}

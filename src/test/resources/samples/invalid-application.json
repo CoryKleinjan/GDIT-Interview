@@ -1,0 +1,18 @@
+{
+  "studentInfo": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "ssn": "invalid",
+    "dateOfBirth": "2015-01-01"
+  },
+  "dependencyStatus": "dependent",
+  "maritalStatus": "married",
+  "household": {
+    "numberInHousehold": 2,
+    "numberInCollege": 5
+  },
+  "income": {
+    "studentIncome": -1000
+  },
+  "stateOfResidence": "XX"
+}

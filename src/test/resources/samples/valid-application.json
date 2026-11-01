@@ -1,0 +1,19 @@
+{
+  "studentInfo": {
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "ssn": "123456789",
+    "dateOfBirth": "2003-05-15"
+  },
+  "dependencyStatus": "dependent",
+  "maritalStatus": "single",
+  "household": {
+    "numberInHousehold": 4,
+    "numberInCollege": 1
+  },
+  "income": {
+    "studentIncome": 5000,
+    "parentIncome": 65000
+  },
+  "stateOfResidence": "CA"
+}
