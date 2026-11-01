@@ -6,6 +6,12 @@ spring:
       accept-case-insensitive-enums: true
     default-property-inclusion: non_null
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics
+
 fafsa:
   edits:
     # One entry per rule id, in the order rules are applied and reported.
