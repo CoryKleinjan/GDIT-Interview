@@ -202,11 +202,8 @@ The git history shows the TDD loop: each `test: ... (red)` commit adds failing t
 
 ## Time spent
 
-- Planning with AI (stack, design, testing approach): ~10 minutes
-- First implementation (rules in code), tests and docs with Claude Code: ~35 minutes
-- Design review and rework (rules in a hot-reloaded file, priority order, new household rule, self-testing rule examples, batch pool, severity only on failures): ~40 minutes
-- Manual testing UI: ~10 minutes
-- Fields and named checks in YAML (schema-driven requests, `fields.yml`, `checks.yml`, one hot-reloaded folder, form built from the schema): ~35 minutes
-- **TODO (Cory):** my own review and walkthrough time, total
+About **1 hour** in total. The commit history runs from 16:13 to 17:10, with planning just before it. That hour covers the first implementation, the design review and rework, the testing UI, and moving fields and checks into YAML.
+
+- **TODO (Cory):** any review and walkthrough time after this
 
 I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment and added with only a YAML entry, priority order with marital status before household, always running every rule, the married-household rule, a dedicated batch pool, reporting severity only on failures, a manual testing UI, and moving checks and application fields into YAML as well. Claude drafted the code and tests test first, and I reviewed the design and results.
