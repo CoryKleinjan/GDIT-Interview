@@ -45,6 +45,16 @@ public final class ApplicationBuilder {
         return this;
     }
 
+    public ApplicationBuilder dependencyStatus(DependencyStatus dependencyStatus) {
+        this.dependencyStatus = dependencyStatus;
+        return this;
+    }
+
+    public ApplicationBuilder maritalStatus(MaritalStatus maritalStatus) {
+        this.maritalStatus = maritalStatus;
+        return this;
+    }
+
     public ApplicationBuilder married(SpouseInfo spouseInfo) {
         this.maritalStatus = MaritalStatus.MARRIED;
         this.spouseInfo = spouseInfo;

@@ -38,7 +38,7 @@ class ValidationApiTest {
         post(VALIDATE, sample("valid-application.json"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("VALID"))
-                .andExpect(jsonPath("$.results", hasSize(8)))
+                .andExpect(jsonPath("$.results", hasSize(11)))
                 .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')]").isEmpty())
                 .andExpect(jsonPath("$.results[?(@.ruleId == 'married-spouse-info')].outcome")
                         .value(contains("NOT_APPLICABLE")));
@@ -52,10 +52,10 @@ class ValidationApiTest {
                 .andExpect(jsonPath("$.results[?(@.outcome == 'FAILED')].ruleId").value(containsInAnyOrder(
                         "student-age", "ssn-format", "dependent-parent-income", "non-negative-income",
                         "household-college-count", "state-code", "married-spouse-info")))
-                .andExpect(jsonPath("$.results[0].ruleId").value("student-age"))
-                .andExpect(jsonPath("$.results[0].severity").value("ERROR"))
-                .andExpect(jsonPath("$.results[0].message").isNotEmpty())
-                .andExpect(jsonPath("$.results[0].fields").value(contains("studentInfo.dateOfBirth")));
+                .andExpect(jsonPath("$.results[2].ruleId").value("student-age"))
+                .andExpect(jsonPath("$.results[2].severity").value("ERROR"))
+                .andExpect(jsonPath("$.results[2].message").isNotEmpty())
+                .andExpect(jsonPath("$.results[2].fields").value(contains("studentInfo.dateOfBirth")));
     }
 
     @Test
@@ -82,19 +82,26 @@ class ValidationApiTest {
     }
 
     @Test
-    void missingStatusesAreRejectedWithEveryFieldError() throws Exception {
+    void missingStatusesAreEditFailuresAndEveryOtherRuleStillRuns() throws Exception {
         post(VALIDATE, "{\"stateOfResidence\": \"CA\"}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.title").value("Bad Request"))
-                .andExpect(jsonPath("$.errors").value(containsInAnyOrder(
-                        "dependencyStatus: must not be null", "maritalStatus: must not be null")));
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("INVALID"))
+                .andExpect(jsonPath("$.results", hasSize(11)))
+                .andExpect(jsonPath("$.results[0].ruleId").value("marital-status"))
+                .andExpect(jsonPath("$.results[0].outcome").value("FAILED"))
+                .andExpect(jsonPath("$.results[?(@.ruleId == 'married-spouse-info')].outcome")
+                        .value(contains("NOT_APPLICABLE")));
     }
 
     @Test
-    void invalidApplicationInsideABatchIsReportedByIndex() throws Exception {
-        post(VALIDATE_BATCH, "{\"applications\": [{\"maritalStatus\": \"single\"}]}")
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors").value(contains("applications[0].dependencyStatus: must not be null")));
+    void listsTheActiveRulesInPriorityOrder() throws Exception {
+        mvc.perform(get("/api/v1/rules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(11)))
+                .andExpect(jsonPath("$[0].id").value("marital-status"))
+                .andExpect(jsonPath("$[0].severity").value("ERROR"))
+                .andExpect(jsonPath("$[0].fields").value(contains("maritalStatus")))
+                .andExpect(jsonPath("$[0].check").doesNotExist());
     }
 
     @Test

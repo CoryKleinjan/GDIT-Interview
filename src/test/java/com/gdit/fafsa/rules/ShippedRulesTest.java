@@ -4,12 +4,16 @@ import static com.gdit.fafsa.model.ApplicationBuilder.aValidApplication;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.gdit.fafsa.engine.EditRule;
+import com.gdit.fafsa.engine.Severity;
 import com.gdit.fafsa.model.ApplicationBuilder;
 import com.gdit.fafsa.model.FafsaApplication.SpouseInfo;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
+import jakarta.validation.Validation;
+import org.springframework.core.io.ClassPathResource;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -17,13 +21,36 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
 import org.junit.jupiter.params.provider.ValueSource;
 
-/** Rule logic only: plain JUnit, no Spring context. Severity and messages are covered by the engine and API tests. */
-class FafsaEditRulesTest {
+/**
+ * The rules shipped in {@code rules.yml}, loaded exactly as the service loads them but with a fixed clock.
+ * Plain JUnit, no Spring context. One nested class per rule, covering its boundaries.
+ */
+class ShippedRulesTest {
 
     private static final LocalDate TODAY = LocalDate.of(2026, 11, 1);
     private static final Clock CLOCK = Clock.fixed(TODAY.atStartOfDay().toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
 
-    private final FafsaEditRules rules = new FafsaEditRules();
+    private static final List<EditRule> RULES =
+            new RuleLoader(Validation.buildDefaultValidatorFactory().getValidator(), CLOCK)
+                    .load(new ClassPathResource("rules.yml"));
+
+    private static EditRule rule(String id) {
+        return RULES.stream().filter(rule -> rule.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    @Test
+    void rulesRunInPriorityOrderWithStatusesFirstAndHouseholdAfterMaritalStatus() {
+        assertThat(RULES).extracting(EditRule::id).containsExactly(
+                "marital-status", "dependency-status", "student-age", "ssn-format", "dependent-parent-income",
+                "non-negative-income", "married-spouse-info", "household-college-count",
+                "married-household-includes-spouse", "state-code", "student-age-plausible");
+    }
+
+    @Test
+    void onlyThePlausibilityCheckIsAWarning() {
+        assertThat(RULES).filteredOn(rule -> rule.severity() == Severity.WARNING)
+                .extracting(EditRule::id).containsExactly("student-age-plausible");
+    }
 
     private static boolean passes(EditRule rule, ApplicationBuilder application) {
         return rule.check().test(application.build());
@@ -34,9 +61,71 @@ class FafsaEditRulesTest {
     }
 
     @Nested
+    class MaritalStatusRequired {
+
+        private final EditRule rule = rule("marital-status");
+
+        @Test
+        void passesForSingleOrMarried() {
+            assertThat(passes(rule, aValidApplication())).isTrue();
+            assertThat(passes(rule, aValidApplication().married(null))).isTrue();
+        }
+
+        @Test
+        void failsWhenMissing() {
+            assertThat(passes(rule, aValidApplication().maritalStatus(null))).isFalse();
+        }
+    }
+
+    @Nested
+    class DependencyStatusRequired {
+
+        private final EditRule rule = rule("dependency-status");
+
+        @Test
+        void passesForDependentOrIndependent() {
+            assertThat(passes(rule, aValidApplication())).isTrue();
+            assertThat(passes(rule, aValidApplication().independent())).isTrue();
+        }
+
+        @Test
+        void failsWhenMissing() {
+            assertThat(passes(rule, aValidApplication().dependencyStatus(null))).isFalse();
+        }
+    }
+
+    @Nested
+    class MarriedHouseholdIncludesSpouse {
+
+        private final EditRule rule = rule("married-household-includes-spouse");
+
+        @ParameterizedTest(name = "household={0}")
+        @ValueSource(ints = {2, 5})
+        void passesWhenHouseholdCountsStudentAndSpouse(int household) {
+            assertThat(passes(rule, aValidApplication().married(null).household(household, 1))).isTrue();
+        }
+
+        @Test
+        void failsWhenAMarriedStudentsHouseholdIsOne() {
+            assertThat(passes(rule, aValidApplication().married(null).household(1, 1))).isFalse();
+        }
+
+        @Test
+        void failsWhenHouseholdIsMissing() {
+            assertThat(passes(rule, aValidApplication().married(null).household(null, 1))).isFalse();
+        }
+
+        @Test
+        void appliesOnlyToMarriedStudents() {
+            assertThat(applies(rule, aValidApplication().married(null))).isTrue();
+            assertThat(applies(rule, aValidApplication())).isFalse();
+        }
+    }
+
+    @Nested
     class StudentAge {
 
-        private final EditRule rule = rules.studentAge(CLOCK);
+        private final EditRule rule = rule("student-age");
 
         @Test
         void passesOnTheFourteenthBirthday() {
@@ -62,7 +151,7 @@ class FafsaEditRulesTest {
     @Nested
     class SsnFormat {
 
-        private final EditRule rule = rules.ssnFormat();
+        private final EditRule rule = rule("ssn-format");
 
         @ParameterizedTest
         @ValueSource(strings = {"123456789", "987654321"})
@@ -81,7 +170,7 @@ class FafsaEditRulesTest {
     @Nested
     class DependentParentIncome {
 
-        private final EditRule rule = rules.dependentParentIncome();
+        private final EditRule rule = rule("dependent-parent-income");
 
         @Test
         void passesWhenADependentReportsParentIncome() {
@@ -102,13 +191,14 @@ class FafsaEditRulesTest {
         void appliesOnlyToDependentStudents() {
             assertThat(applies(rule, aValidApplication())).isTrue();
             assertThat(applies(rule, aValidApplication().independent())).isFalse();
+            assertThat(applies(rule, aValidApplication().dependencyStatus(null))).isFalse();
         }
     }
 
     @Nested
     class NonNegativeIncome {
 
-        private final EditRule rule = rules.nonNegativeIncome();
+        private final EditRule rule = rule("non-negative-income");
 
         @ParameterizedTest(name = "student={0}, parent={1}")
         @CsvSource({"0, 0", "5000, 65000", "5000,", ", 65000", ","})
@@ -126,7 +216,7 @@ class FafsaEditRulesTest {
     @Nested
     class HouseholdCollegeCount {
 
-        private final EditRule rule = rules.householdCollegeCount();
+        private final EditRule rule = rule("household-college-count");
 
         @ParameterizedTest(name = "household={0}, college={1}")
         @CsvSource({"4, 1", "2, 2", "1, 0"})
@@ -144,7 +234,7 @@ class FafsaEditRulesTest {
     @Nested
     class StateCode {
 
-        private final EditRule rule = rules.stateCode();
+        private final EditRule rule = rule("state-code");
 
         @ParameterizedTest
         @ValueSource(strings = {"CA", "NY", "WY", "DC", "PR", "GU"})
@@ -163,7 +253,7 @@ class FafsaEditRulesTest {
     @Nested
     class MarriedSpouseInfo {
 
-        private final EditRule rule = rules.marriedSpouseInfo();
+        private final EditRule rule = rule("married-spouse-info");
 
         @Test
         void passesWhenSpouseNameAndSsnArePresent() {
@@ -185,13 +275,14 @@ class FafsaEditRulesTest {
         void appliesOnlyToMarriedStudents() {
             assertThat(applies(rule, aValidApplication().married(null))).isTrue();
             assertThat(applies(rule, aValidApplication())).isFalse();
+            assertThat(applies(rule, aValidApplication().maritalStatus(null))).isFalse();
         }
     }
 
     @Nested
     class StudentAgePlausible {
 
-        private final EditRule rule = rules.studentAgePlausible(CLOCK);
+        private final EditRule rule = rule("student-age-plausible");
 
         @Test
         void passesAtAge120() {
@@ -204,9 +295,8 @@ class FafsaEditRulesTest {
         }
 
         @Test
-        void appliesOnlyWhenDateOfBirthIsPresent() {
-            assertThat(applies(rule, aValidApplication())).isTrue();
-            assertThat(applies(rule, aValidApplication().dateOfBirth(null))).isFalse();
+        void passesWhenDateOfBirthIsMissingBecauseStudentAgeReportsThat() {
+            assertThat(passes(rule, aValidApplication().dateOfBirth(null))).isTrue();
         }
     }
 }
