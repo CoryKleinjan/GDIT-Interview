@@ -6,7 +6,7 @@ A Spring Boot service that applies FAFSA "edit" rules to an application and repo
 - Each rule carries its own **examples** (applications it must pass, fail, or not apply to). They're checked every time the file loads, so a rule that doesn't behave as described never goes live.
 - The shipped rule set has the 7 required edits plus 4 more: marital and dependency status, a married student's household size, and a warning-level age plausibility check.
 - Java 21, Spring Boot 3.5, Maven (wrapper included).
-- 98 JUnit tests plus 55 rule examples, **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
+- 99 JUnit tests plus 55 rule examples, **100% line and branch coverage**, enforced by the build (`mvn verify` fails below 100%).
 
 Design reasoning is in [DECISIONS.md](DECISIONS.md).
 
@@ -18,6 +18,8 @@ Prerequisite: JDK 21. Maven is optional, because `./mvnw` downloads the right ve
 ./mvnw verify            # compile, run all tests, enforce 100% line + branch coverage
 ./mvnw spring-boot:run   # start on http://localhost:8080 with the bundled rules
 ```
+
+Then open **http://localhost:8080** for the manual testing page (see [Manual testing UI](#manual-testing-ui)).
 
 The coverage report is written to `target/site/jacoco/index.html`.
 
@@ -61,11 +63,11 @@ curl -s -X POST http://localhost:8080/api/v1/applications/validate \
 {
   "status": "VALID",
   "results": [
-    { "ruleId": "marital-status", "outcome": "PASSED", "severity": "ERROR", "fields": ["maritalStatus"] },
-    { "ruleId": "dependency-status", "outcome": "PASSED", "severity": "ERROR", "fields": ["dependencyStatus"] },
+    { "ruleId": "marital-status", "outcome": "PASSED", "fields": ["maritalStatus"] },
+    { "ruleId": "dependency-status", "outcome": "PASSED", "fields": ["dependencyStatus"] },
     "... one entry per rule ...",
-    { "ruleId": "married-spouse-info", "outcome": "NOT_APPLICABLE", "severity": "ERROR", "fields": ["spouseInfo.firstName", "spouseInfo.lastName", "spouseInfo.ssn"] },
-    { "ruleId": "student-age-plausible", "outcome": "PASSED", "severity": "WARNING", "fields": ["studentInfo.dateOfBirth"] }
+    { "ruleId": "married-spouse-info", "outcome": "NOT_APPLICABLE", "fields": ["spouseInfo.firstName", "spouseInfo.lastName", "spouseInfo.ssn"] },
+    { "ruleId": "student-age-plausible", "outcome": "PASSED", "fields": ["studentInfo.dateOfBirth"] }
   ]
 }
 ```
@@ -82,8 +84,8 @@ curl -s -X POST http://localhost:8080/api/v1/applications/validate \
 {
   "status": "INVALID",
   "results": [
-    { "ruleId": "marital-status", "outcome": "PASSED", "severity": "ERROR", "fields": ["maritalStatus"] },
-    { "ruleId": "dependency-status", "outcome": "PASSED", "severity": "ERROR", "fields": ["dependencyStatus"] },
+    { "ruleId": "marital-status", "outcome": "PASSED", "fields": ["maritalStatus"] },
+    { "ruleId": "dependency-status", "outcome": "PASSED", "fields": ["dependencyStatus"] },
     {
       "ruleId": "student-age",
       "outcome": "FAILED",
@@ -99,8 +101,8 @@ curl -s -X POST http://localhost:8080/api/v1/applications/validate \
       "fields": ["studentInfo.ssn"]
     },
     "... dependent-parent-income, non-negative-income, married-spouse-info, household-college-count, state-code: FAILED ...",
-    { "ruleId": "married-household-includes-spouse", "outcome": "PASSED", "severity": "ERROR", "fields": ["household.numberInHousehold"] },
-    { "ruleId": "student-age-plausible", "outcome": "PASSED", "severity": "WARNING", "fields": ["studentInfo.dateOfBirth"] }
+    { "ruleId": "married-household-includes-spouse", "outcome": "PASSED", "fields": ["household.numberInHousehold"] },
+    { "ruleId": "student-age-plausible", "outcome": "PASSED", "fields": ["studentInfo.dateOfBirth"] }
   ]
 }
 ```
@@ -138,7 +140,7 @@ curl -s -X POST http://localhost:8080/api/v1/applications/validate \
 | `status` | `VALID`, `VALID_WITH_WARNINGS` (only WARNING rules failed) or `INVALID` (any ERROR rule failed) |
 | `results[].ruleId` | Stable rule id from the rule file |
 | `results[].outcome` | `PASSED`, `FAILED`, or `NOT_APPLICABLE` (a conditional rule whose `when` didn't hold) |
-| `results[].severity` | `ERROR`, `WARNING` or `INFO` |
+| `results[].severity` | Only on failures: `ERROR`, `WARNING` or `INFO`. A rule's configured severity is always visible at `GET /api/v1/rules`. |
 | `results[].message` | Only on failures: what's wrong and how to fix it |
 | `results[].fields` | JSON paths of the fields the rule checks |
 
@@ -202,6 +204,14 @@ At startup, an invalid rule file stops the service, so it can never start with n
 
 Only a genuinely new *kind* of check, or a new field in the application, needs code: a record in `Check.java`, or an entry in `Fields.java`.
 
+## Manual testing UI
+
+`http://localhost:8080` serves a single page for trying the service by hand. It's plain HTML and JavaScript in `src/main/resources/static/index.html`, with no build step or extra dependencies, and it calls the same public endpoints as any client.
+
+- **Input:** a form for every application field, or a raw JSON tab (send malformed JSON to see the 400 response). Buttons load the spec's valid and invalid samples.
+- **Validate:** shows the overall status and a colour-coded row per rule: green for passed, red for a failed ERROR, amber for a failed WARNING, grey for not applicable. Fields named by failed rules are outlined in the form.
+- **Live rules:** the rules currently loaded, in priority order. The list refreshes every 10 seconds and when you return to the tab. Run with an external rule file (see [Changing rules without a deployment](#changing-rules-without-a-deployment)), edit it, and you'll see the change here and in the next validation, with no restart.
+
 ## Project layout
 
 ```
@@ -211,6 +221,7 @@ src/main/java/com/gdit/fafsa/
   rules/   rule file format (RuleDefinition, Check, Condition, Examples), Fields registry, RuleLoader, RuleFileWatcher
   api/     controllers, batch thread pool, batch request/response, 400 handling
 src/main/resources/rules.yml   the shipped rule set
+src/main/resources/static/     the manual testing page
 src/test/java/...              tests mirror the packages; ApplicationBuilder makes test data
 ```
 

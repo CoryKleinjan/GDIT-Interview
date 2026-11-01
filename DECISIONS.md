@@ -135,6 +135,8 @@ The `engine` package knows nothing about FAFSA or YAML, so it would also work fo
 | `WARNING` | Suspicious but processable, so the applicant should confirm it | → `VALID_WITH_WARNINGS` |
 | `INFO` | Informational only | none |
 
+**Severity is reported only on failures.** A severity describes how much a *failure* matters, so `PASSED` and `NOT_APPLICABLE` results carry neither `severity` nor `message`. Showing `"severity": "ERROR"` next to a passed rule read as if something was wrong. A rule's configured severity is still visible at `GET /api/v1/rules`.
+
 All the required edits are `ERROR`, because each one describes data that's wrong or missing, not merely unusual. `student-age-plausible` (older than 120) is a `WARNING`. It comes from the spec's "Age must be between 14 and 120" example: an age over 120 is almost certainly a typo, but it shouldn't block processing. Severity is one line in the rule file, so policy changes don't need a developer.
 
 ## Assumptions
@@ -155,10 +157,11 @@ All the required edits are `ERROR`, because each one describes data that's wrong
 - **Metrics** (Micrometer and Actuator): `fafsa.applications.validated{status}`, `fafsa.edits.failed{rule,severity}` and `fafsa.rules.reloads{result}`. A spike in one rule's failures right after a reload is the signal that a rule change went wrong.
 - **Config management**: the rule file location and reload interval are ordinary Spring properties, overridable per environment.
 - **Health**: `/actuator/health`.
+- **Manual testing UI** at `/`: one static HTML page with plain JavaScript, served by Spring. I chose it over Swagger UI, which only gives raw JSON in and out, and over a separate React app, which would add a Node build chain to review and run. The page validates through the real endpoints, highlights the fields that failed, and shows the live rule list. So a rule-file edit can be checked by hand within seconds, with no restart.
 
 ## Testing strategy
 
-There are two layers. The **code** is covered by 98 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **rules** are covered by 55 examples that live next to them in `rules.yml`. None of the Java tests is specific to one rule, so adding a rule never needs a Java change.
+There are two layers. The **code** is covered by 99 generic JUnit tests at 100% line and branch coverage, enforced by JaCoCo in `mvn verify` (only the `main()` launcher is excluded). The **rules** are covered by 55 examples that live next to them in `rules.yml`. None of the Java tests is specific to one rule, so adding a rule never needs a Java change.
 
 | What | Test class | Approach |
 |---|---|---|
@@ -169,7 +172,7 @@ There are two layers. The **code** is covered by 98 generic JUnit tests at 100% 
 | Hot reload | `RuleFileWatcherTest` | Uses a real temp file to test pickup of changes, rejection of a bad file (old rules kept and reported once), a missing file, and startup failure |
 | Engine | `EditEngineTest` | Uses fake rules, so it tests the engine and not FAFSA: collecting all results, order, `NOT_APPLICABLE`, severity roll-up, rule swapping and metrics |
 | Batch pool | `BatchConfigurationTest` | Pool sizing, thread names and metrics |
-| API | `ValidationApiTest` | Full Spring context with MockMvc. The spec's sample payloads assert exactly the seven expected failures. Also covers a 200-application batch keeping its order across threads, batch limits, every 400 path, the live rules endpoint and metrics. |
+| API | `ValidationApiTest` | Full Spring context with MockMvc. The spec's sample payloads assert exactly the seven expected failures. Also covers a 200-application batch keeping its order across threads, batch limits, every 400 path, the live rules endpoint, the testing page being served, and metrics. |
 
 `ApplicationBuilder` (test only) starts from the spec's valid sample, so each test states only the field it's about.
 
@@ -188,7 +191,8 @@ The git history shows the TDD loop: each `test: ... (red)` commit adds failing t
 
 - Planning with AI (stack, design, testing approach): ~10 minutes
 - First implementation (rules in code), tests and docs with Claude Code: ~35 minutes
-- Design review and rework (rules in a hot-reloaded file, priority order, new household rule, self-testing rule examples, batch pool): ~40 minutes
+- Design review and rework (rules in a hot-reloaded file, priority order, new household rule, self-testing rule examples, batch pool, severity only on failures): ~40 minutes
+- Manual testing UI: ~10 minutes
 - **TODO (Cory):** my own review and walkthrough time, total
 
-I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment and added with only a YAML entry, priority order with marital status before household, always running every rule, the married-household rule, and a dedicated batch pool. Claude drafted the code and tests test first, and I reviewed the design and results.
+I used Claude (via Claude Code) throughout. I made the stack, scope, coverage target and code-style decisions, and the design calls in review: rules changeable without deployment and added with only a YAML entry, priority order with marital status before household, always running every rule, the married-household rule, a dedicated batch pool, reporting severity only on failures, and a manual testing UI. Claude drafted the code and tests test first, and I reviewed the design and results.
